@@ -1,0 +1,283 @@
+---
+title: Upload Partial
+description: Upload large files in chunks using partial/chunked upload
+---
+
+Upload large files in multiple chunks. This endpoint is designed for uploading files that are too large to send in a single request, or for implementing resumable uploads.
+
+## Endpoint
+
+```
+POST /api/upload/partial
+```
+
+## Authentication
+
+Requires authentication via Bearer token in the `Authorization` header.
+
+```
+Authorization: Bearer <your-token>
+```
+
+## How It Works
+
+1. Send the first chunk with `Content-Range` starting at byte 0
+2. Server responds with a `partialIdentifier`
+3. Send subsequent chunks with the same `partialIdentifier`
+4. Mark the last chunk with `X-Zipline-P-Lastchunk: true`
+5. Server processes the complete file asynchronously
+
+## Request
+
+### Multipart Form Data
+
+Send one file chunk as `multipart/form-data`. Only one file field is allowed per request.
+
+### Headers
+
+<ParamField header="Content-Range" type="string" required>
+  Byte range of the current chunk in format: `bytes START-END/TOTAL`.
+  
+  ```bash
+  Content-Range: bytes 0-999999/5000000
+  ```
+  
+  <Note>
+    The first chunk must start at byte 0.
+  </Note>
+</ParamField>
+
+<ParamField header="X-Zipline-P-Filename" type="string" required>
+  Original filename with extension.
+  
+  ```bash
+  X-Zipline-P-Filename: large-video.mp4
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-P-Content-Type" type="string" required>
+  MIME type of the complete file.
+  
+  ```bash
+  X-Zipline-P-Content-Type: video/mp4
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-P-Content-Length" type="string" required>
+  Total size of the complete file in bytes.
+  
+  ```bash
+  X-Zipline-P-Content-Length: 5000000
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-P-Identifier" type="string">
+  Partial upload identifier (provided by server after first chunk). Required for all chunks except the first.
+  
+  ```bash
+  X-Zipline-P-Identifier: a8b9c0d1
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-P-Lastchunk" type="boolean" default="false">
+  Set to `true` for the final chunk to trigger file processing.
+  
+  ```bash
+  X-Zipline-P-Lastchunk: true
+  ```
+</ParamField>
+
+### Additional Headers
+
+All standard upload headers from `/api/upload` are supported and should be sent with the **first chunk**:
+
+- `X-Zipline-Format`
+- `X-Zipline-Filename` (override generated name)
+- `X-Zipline-File-Extension`
+- `X-Zipline-Domain`
+- `X-Zipline-Deletes-At`
+- `X-Zipline-Password`
+- `X-Zipline-Max-Views`
+- `X-Zipline-Original-Name`
+- `X-Zipline-Folder`
+
+<Warning>
+  Image compression headers are not supported for partial uploads.
+</Warning>
+
+## Response
+
+### Chunk Acknowledgement (all chunks except last)
+
+<ResponseField name="files" type="array" required>
+  Empty array until the last chunk.
+</ResponseField>
+
+<ResponseField name="partialSuccess" type="boolean" required>
+  Always `true` for successful chunk upload.
+</ResponseField>
+
+<ResponseField name="partialIdentifier" type="string">
+  Unique identifier for this upload session (returned on first chunk only).
+</ResponseField>
+
+### Final Response (last chunk)
+
+<ResponseField name="files" type="array" required>
+  Array containing the uploaded file object.
+  
+  <ResponseField name="files[].id" type="string" required>
+    Unique file identifier.
+  </ResponseField>
+  
+  <ResponseField name="files[].name" type="string" required>
+    Generated filename with extension.
+  </ResponseField>
+  
+  <ResponseField name="files[].type" type="string" required>
+    MIME type of the file.
+  </ResponseField>
+  
+  <ResponseField name="files[].url" type="string" required>
+    Full URL to access the file.
+  </ResponseField>
+  
+  <ResponseField name="files[].pending" type="boolean">
+    Set to `true` - file is being processed asynchronously.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="partialSuccess" type="boolean" required>
+  Always `true` for successful upload.
+</ResponseField>
+
+<ResponseField name="deletesAt" type="string">
+  ISO 8601 timestamp when file will be deleted, or `"never"` if no expiration.
+</ResponseField>
+
+## Examples
+
+### First Chunk (1MB file in 2 chunks)
+
+```bash
+curl -X POST https://your-zipline.com/api/upload/partial \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Range: bytes 0-524287/1048576" \
+  -H "X-Zipline-P-Filename: video.mp4" \
+  -H "X-Zipline-P-Content-Type: video/mp4" \
+  -H "X-Zipline-P-Content-Length: 1048576" \
+  -H "X-Zipline-Format: uuid" \
+  -H "X-Zipline-Deletes-At: 30d" \
+  -F "file=@/tmp/chunk1.bin"
+```
+
+Response:
+```json
+{
+  "files": [],
+  "partialSuccess": true,
+  "partialIdentifier": "a8b9c0d1"
+}
+```
+
+### Second Chunk (middle chunk)
+
+```bash
+curl -X POST https://your-zipline.com/api/upload/partial \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Range: bytes 524288-786431/1048576" \
+  -H "X-Zipline-P-Filename: video.mp4" \
+  -H "X-Zipline-P-Content-Type: video/mp4" \
+  -H "X-Zipline-P-Content-Length: 1048576" \
+  -H "X-Zipline-P-Identifier: a8b9c0d1" \
+  -F "file=@/tmp/chunk2.bin"
+```
+
+Response:
+```json
+{
+  "files": [],
+  "partialSuccess": true
+}
+```
+
+### Final Chunk
+
+```bash
+curl -X POST https://your-zipline.com/api/upload/partial \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Range: bytes 786432-1048575/1048576" \
+  -H "X-Zipline-P-Filename: video.mp4" \
+  -H "X-Zipline-P-Content-Type: video/mp4" \
+  -H "X-Zipline-P-Content-Length: 1048576" \
+  -H "X-Zipline-P-Identifier: a8b9c0d1" \
+  -H "X-Zipline-P-Lastchunk: true" \
+  -F "file=@/tmp/chunk3.bin"
+```
+
+Response:
+```json
+{
+  "files": [
+    {
+      "id": "clx7g8kj30001abc123xyz",
+      "name": "550e8400-e29b-41d4-a716-446655440000.mp4",
+      "type": "video/mp4",
+      "url": "https://files.example.com/550e8400-e29b-41d4-a716-446655440000.mp4",
+      "pending": true
+    }
+  ],
+  "partialSuccess": true,
+  "deletesAt": "2024-12-31T23:59:59.000Z"
+}
+```
+
+## Server-Side Processing
+
+When the last chunk is received:
+
+1. File metadata is created in the database
+2. Background worker combines all chunks
+3. File is uploaded to configured datasource
+4. Database is updated with final file size
+5. Webhooks are triggered (if configured)
+
+The file URL is immediately available, but the file may not be accessible until processing completes (indicated by `pending: true`).
+
+## Error Responses
+
+### 400 Bad Request
+
+- Missing required partial headers
+- Invalid `Content-Range` format
+- Invalid or missing `partialIdentifier` (after first chunk)
+- Multiple files in one request (only one allowed)
+- Disabled file extension
+- Invalid filename characters
+
+### 403 Forbidden
+
+- Folder not open for uploads
+
+### 413 Payload Too Large
+
+- Total file size exceeds `maxFileSize` limit
+- Upload would exceed user quota
+
+## Notes
+
+<Note>
+  The server caches partial upload state in memory. If the server restarts, you'll need to start the upload from the beginning.
+</Note>
+
+<Note>
+  Temporary chunk files are stored in the server's configured `tempDirectory` with a prefix like `zipline_partial_{identifier}_`.
+</Note>
+
+<Warning>
+  You must send chunks sequentially. The server validates that chunks are received in order.
+</Warning>
+
+<Note>
+  File processing happens asynchronously after the last chunk. The file URL is returned immediately but may not be accessible for a few seconds.
+</Note>

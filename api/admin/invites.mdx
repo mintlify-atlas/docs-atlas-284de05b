@@ -1,0 +1,271 @@
+---
+title: Invites
+description: Manage user registration invite codes
+---
+
+<Warning>
+  **Authentication Required**: These endpoints require `ADMIN` or `SUPERADMIN` role.
+</Warning>
+
+<Note>
+  Invites are only relevant when user registration is restricted. If open registration is enabled, invites are not required for account creation.
+</Note>
+
+## List Invites
+
+<Card title="GET /api/auth/invites" icon="list">
+  Retrieve all invite codes in the system.
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/auth/invites \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+### Response
+
+Returns an array of invite objects.
+
+<ResponseField name="id" type="string">
+  Unique invite identifier (CUID)
+</ResponseField>
+
+<ResponseField name="code" type="string">
+  The invite code that users enter during registration
+</ResponseField>
+
+<ResponseField name="uses" type="number">
+  Number of times this invite has been used
+</ResponseField>
+
+<ResponseField name="maxUses" type="number | null">
+  Maximum allowed uses. `null` for unlimited uses.
+</ResponseField>
+
+<ResponseField name="expiresAt" type="string | null">
+  ISO 8601 timestamp when invite expires. `null` for no expiration.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when invite was created
+</ResponseField>
+
+<ResponseField name="inviterId" type="string">
+  ID of the admin who created this invite
+</ResponseField>
+
+<ResponseField name="inviter" type="object">
+  Basic information about the admin who created the invite
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Admin user ID
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Admin username
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json Example Response
+[
+  {
+    "id": "cliii123456789",
+    "code": "abc123",
+    "uses": 3,
+    "maxUses": 10,
+    "expiresAt": "2024-12-31T23:59:59.000Z",
+    "createdAt": "2024-03-01T10:00:00.000Z",
+    "updatedAt": "2024-03-10T14:30:00.000Z",
+    "inviterId": "cladm999888777",
+    "inviter": {
+      "id": "cladm999888777",
+      "username": "admin_user"
+    }
+  },
+  {
+    "id": "cliii987654321",
+    "code": "xyz789",
+    "uses": 0,
+    "maxUses": null,
+    "expiresAt": null,
+    "createdAt": "2024-02-15T08:30:00.000Z",
+    "updatedAt": "2024-02-15T08:30:00.000Z",
+    "inviterId": "cladm999888777",
+    "inviter": {
+      "id": "cladm999888777",
+      "username": "admin_user"
+    }
+  }
+]
+```
+
+---
+
+## Create Invite
+
+<Card title="POST /api/auth/invites" icon="plus">
+  Generate a new invite code with optional expiration and usage limits.
+</Card>
+
+### Request
+
+<ParamField body="expiresAt" type="string | 'never'" required>
+  Expiration timestamp. Use `"never"` for no expiration, or provide:
+  - ISO 8601 timestamp (e.g., `"2024-12-31T23:59:59.000Z"`)
+  - Relative duration (e.g., `"7d"`, `"30d"`, `"1h"`)
+</ParamField>
+
+<ParamField body="maxUses" type="number" optional>
+  Maximum number of times this invite can be used. Omit or set to `null` for unlimited uses. Minimum: 1.
+</ParamField>
+
+```bash Create unlimited invite expiring in 7 days
+curl -X POST https://your-zipline.com/api/auth/invites \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expiresAt": "7d",
+    "maxUses": null
+  }'
+```
+
+```bash Create single-use invite
+curl -X POST https://your-zipline.com/api/auth/invites \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expiresAt": "never",
+    "maxUses": 1
+  }'
+```
+
+```bash Create invite with specific expiration
+curl -X POST https://your-zipline.com/api/auth/invites \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expiresAt": "2024-12-31T23:59:59.000Z",
+    "maxUses": 50
+  }'
+```
+
+### Response
+
+Returns the created invite object.
+
+```json Example Response
+{
+  "id": "cliii555666777",
+  "code": "a1b2c3",
+  "uses": 0,
+  "maxUses": 10,
+  "expiresAt": "2024-03-22T12:00:00.000Z",
+  "createdAt": "2024-03-15T12:00:00.000Z",
+  "updatedAt": "2024-03-15T12:00:00.000Z",
+  "inviterId": "cladm999888777",
+  "inviter": {
+    "id": "cladm999888777",
+    "username": "admin_user"
+  }
+}
+```
+
+### Rate Limiting
+
+This endpoint is rate-limited to **1 request per second**.
+
+---
+
+## Get Invite
+
+<Card title="GET /api/auth/invites/:id" icon="magnifying-glass">
+  Get details about a specific invite by ID or code.
+</Card>
+
+### Request
+
+The `:id` parameter accepts either:
+- Invite ID (e.g., `cliii123456789`)
+- Invite code (e.g., `abc123`)
+
+```bash Get by ID
+curl -X GET https://your-zipline.com/api/auth/invites/cliii123456789 \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+```bash Get by code
+curl -X GET https://your-zipline.com/api/auth/invites/abc123 \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+### Response
+
+Returns a single invite object in the same format as the list endpoint.
+
+### Errors
+
+- **404 Not Found**: Invite not found through ID or code
+
+---
+
+## Delete Invite
+
+<Card title="DELETE /api/auth/invites/:id" icon="trash">
+  Permanently delete an invite code.
+</Card>
+
+### Request
+
+The `:id` parameter must be the invite **ID** (not the code).
+
+```bash
+curl -X DELETE https://your-zipline.com/api/auth/invites/cliii123456789 \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+### Response
+
+Returns the deleted invite object.
+
+```json Example Response
+{
+  "id": "cliii123456789",
+  "code": "abc123",
+  "uses": 3,
+  "maxUses": 10,
+  "expiresAt": "2024-12-31T23:59:59.000Z",
+  "createdAt": "2024-03-01T10:00:00.000Z",
+  "updatedAt": "2024-03-10T14:30:00.000Z",
+  "inviterId": "cladm999888777",
+  "inviter": {
+    "id": "cladm999888777",
+    "username": "admin_user"
+  }
+}
+```
+
+### Errors
+
+- **404 Not Found**: Invite not found
+
+<Warning>
+  Deleting an invite is permanent. Users with the deleted code will no longer be able to register.
+</Warning>
+
+---
+
+## Invite Code Format
+
+Invite codes are randomly generated strings with length configured by the server administrator (default: 6 characters). The code length is set in server settings under `invitesLength`.
+
+## Automatic Cleanup
+
+The server automatically removes expired invites based on the `tasksClearInvitesInterval` setting (default: every 30 minutes).
+
+## Usage Tracking
+
+The `uses` field increments each time someone successfully registers with the invite. When `uses` reaches `maxUses`, the invite can no longer be used.

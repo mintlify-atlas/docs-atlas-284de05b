@@ -1,0 +1,203 @@
+---
+title: Update File
+description: Update file metadata including name, favorite status, password, and tags
+---
+
+<RequestExample>
+```bash cURL
+curl -X PATCH "https://your-zipline.com/api/user/files/clxyz123" \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "favorite": true,
+    "originalName": "my-screenshot.png",
+    "maxViews": 100
+  }'
+```
+</RequestExample>
+
+## PATCH /api/user/files/:id
+
+Update metadata for a specific file. All fields are optional - only include the fields you want to update.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The file ID or file name to update. Both the unique file ID (`clxyz123`) and the file name on server (`abc123.png`) are accepted.
+</ParamField>
+
+### Request Body
+
+<ParamField body="favorite" type="boolean">
+  Mark the file as favorite or unfavorite
+</ParamField>
+
+<ParamField body="maxViews" type="number">
+  Maximum number of views before the file is deleted. Must be 0 or greater. Set to 0 to remove the limit.
+</ParamField>
+
+<ParamField body="password" type="string | null">
+  Set or remove password protection. 
+  - Provide a password string to set protection
+  - Set to `null` or empty string to remove protection
+</ParamField>
+
+<ParamField body="originalName" type="string">
+  Update the original file name. Must be at least 1 character and cannot contain invalid path characters.
+</ParamField>
+
+<ParamField body="type" type="string">
+  Update the MIME type of the file (e.g., `image/png`, `application/pdf`)
+</ParamField>
+
+<ParamField body="tags" type="array">
+  Array of tag IDs to associate with this file. All tag IDs must exist and belong to the file owner.
+  
+  <Expandable title="Example">
+    ```json
+    ["tag1", "tag2", "tag3"]
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField body="name" type="string">
+  Update the file name on the server. Must be unique across all files.
+  
+  <Note>
+    Changing the file name will physically rename the file in the datasource and update the file's URL.
+  </Note>
+</ParamField>
+
+### Response
+
+Returns the updated file object with the same structure as the [Get File](/api/files/get) endpoint.
+
+<ResponseField name="id" type="string">
+  Unique file identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  File name on server (updated if changed)
+</ResponseField>
+
+<ResponseField name="originalName" type="string | null">
+  Original name of the uploaded file (updated if changed)
+</ResponseField>
+
+<ResponseField name="size" type="number">
+  File size in bytes
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  MIME type of the file (updated if changed)
+</ResponseField>
+
+<ResponseField name="views" type="number">
+  Number of times the file has been viewed
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum allowed views before deletion (updated if changed)
+</ResponseField>
+
+<ResponseField name="favorite" type="boolean">
+  Whether the file is marked as favorite (updated if changed)
+</ResponseField>
+
+<ResponseField name="password" type="boolean">
+  Whether the file is password-protected (updated if changed)
+</ResponseField>
+
+<ResponseField name="folderId" type="string | null">
+  ID of the folder containing this file
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of file creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update (will be current time)
+</ResponseField>
+
+<ResponseField name="deletesAt" type="string | null">
+  ISO 8601 timestamp of scheduled deletion
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Full URL to access the file (updated if name changed)
+</ResponseField>
+
+<ResponseField name="thumbnail" type="object | null">
+  Thumbnail information if available
+</ResponseField>
+
+<ResponseField name="tags" type="array">
+  Array of tag objects (updated if changed)
+</ResponseField>
+
+### Example Request
+
+```json
+{
+  "favorite": true,
+  "originalName": "important-document.pdf",
+  "maxViews": 50,
+  "password": "secret123",
+  "tags": ["tag1", "tag2"]
+}
+```
+
+### Example Response
+
+```json
+{
+  "id": "clxyz123",
+  "name": "abc123.pdf",
+  "originalName": "important-document.pdf",
+  "size": 2048000,
+  "type": "application/pdf",
+  "views": 15,
+  "maxViews": 50,
+  "favorite": true,
+  "password": true,
+  "folderId": null,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-20T16:45:00.000Z",
+  "deletesAt": null,
+  "url": "https://your-zipline.com/u/abc123.pdf",
+  "thumbnail": null,
+  "tags": [
+    {
+      "id": "tag1",
+      "name": "important",
+      "color": "#ef4444",
+      "createdAt": "2024-01-10T08:00:00.000Z",
+      "updatedAt": "2024-01-10T08:00:00.000Z"
+    },
+    {
+      "id": "tag2",
+      "name": "documents",
+      "color": "#3b82f6",
+      "createdAt": "2024-01-12T09:15:00.000Z",
+      "updatedAt": "2024-01-12T09:15:00.000Z"
+    }
+  ]
+}
+```
+
+### Error Responses
+
+<ResponseField name="400 Bad Request">
+  - Invalid tag IDs provided
+  - File with the new name already exists
+  - Invalid path characters in file name
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  The file does not exist, or you don't have permission to update it.
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error">
+  Failed to rename file in datasource (occurs when changing the `name` field)
+</ResponseField>

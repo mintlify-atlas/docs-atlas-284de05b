@@ -1,0 +1,275 @@
+---
+title: Install from source
+description: Build and run Zipline from source for development or custom deployments
+---
+
+Installing Zipline from source gives you full control over the build process and is ideal for development, contributing, or running custom modifications.
+
+## Prerequisites
+
+Before installing from source, ensure you have:
+
+- **Node.js** 22.x or later (LTS recommended)
+- **pnpm** 10.x or later
+- **PostgreSQL** 16 or later
+- **FFmpeg** (optional, for video thumbnail generation)
+
+<Tip>
+  If you use [Nix](https://nixos.org) with [direnv](https://direnv.net/), you can skip manual dependency installation. See the [development with Nix](#development-with-nix) section.
+</Tip>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/diced/zipline.git
+    cd zipline
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all required packages using pnpm:
+
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    Create a `.env` file with your configuration. Here's a complete example:
+
+    ```bash .env
+    # Enable debug logging (optional)
+    DEBUG=zipline
+
+    # Required: 32+ character secret for encryption
+    CORE_SECRET="your-secret-that-is-32-characters-long-minimum"
+
+    # Required: PostgreSQL connection
+    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/zipline?schema=public"
+
+    # Optional: Server configuration
+    CORE_PORT=3000
+    CORE_HOSTNAME=0.0.0.0
+
+    # Required: Choose datasource type
+    DATASOURCE_TYPE="local"
+    # DATASOURCE_TYPE="s3"
+
+    # If DATASOURCE_TYPE=local
+    DATASOURCE_LOCAL_DIRECTORY="./uploads"
+
+    # If DATASOURCE_TYPE=s3
+    # DATASOURCE_S3_ACCESS_KEY_ID="your-access-key-id"
+    # DATASOURCE_S3_SECRET_ACCESS_KEY="your-secret-access-key"
+    # DATASOURCE_S3_REGION="us-west-2"
+    # DATASOURCE_S3_BUCKET="zipline"
+    # DATASOURCE_S3_ENDPOINT="https://s3.example.com"  # Optional: for non-AWS providers
+    ```
+
+    <Warning>
+      The `CORE_SECRET` must be at least 32 characters long. Generate a secure random string:
+      ```bash
+      openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32
+      ```
+    </Warning>
+  </Step>
+
+  <Step title="Start development server">
+    Run Zipline in development mode with hot reload:
+
+    ```bash
+    pnpm dev
+    ```
+
+    The server will start on `http://localhost:3000` (or your configured port).
+  </Step>
+</Steps>
+
+## Building for production
+
+To build and run Zipline in production mode:
+
+<CodeGroup>
+```bash Build
+pnpm build
+```
+
+```bash Start production server
+pnpm start
+```
+</CodeGroup>
+
+<Info>
+  The build process compiles both the server and client code. The output is placed in the `build/` directory.
+</Info>
+
+## Development with Nix
+
+If you have [Nix](https://nixos.org) and [direnv](https://direnv.net/) installed, setup is even simpler:
+
+<Tabs>
+  <Tab title="With direnv">
+    ```bash
+    direnv allow
+    ```
+
+    Your shell will automatically be configured with all dependencies.
+  </Tab>
+
+  <Tab title="Without direnv">
+    ```bash
+    nix develop --no-pure-eval
+    ```
+
+    This enters a Nix shell with all dependencies available.
+  </Tab>
+</Tabs>
+
+### Useful Nix commands
+
+The Nix environment provides helpful commands for development:
+
+| Command | Description |
+| --- | --- |
+| `pgup` | Starts PostgreSQL server in the background |
+| `pg_ctl status` | Check if PostgreSQL is running |
+| `minioup` | Start a Minio server for testing S3 |
+| `downall` | Stop all running PostgreSQL and Minio services |
+
+## Database management
+
+Zipline uses [Prisma](https://www.prisma.io/) as its ORM. Here are common database operations:
+
+### Making schema changes
+
+After modifying `prisma/schema.prisma`, create a migration:
+
+```bash
+pnpm db:migrate
+```
+
+<Note>
+  This generates a migration file but doesn't apply it. Zipline automatically applies migrations on startup.
+</Note>
+
+### Prototyping changes
+
+For testing schema changes without creating migrations:
+
+```bash
+pnpm db:prototype
+```
+
+<Warning>
+  Only use `db:prototype` for development. Never use it in production.
+</Warning>
+
+## Code quality
+
+Zipline enforces code quality standards. Before submitting changes:
+
+### Validate and format
+
+```bash
+pnpm validate
+```
+
+This runs:
+- **ESLint** for code linting
+- **Prettier** for code formatting
+- **TypeScript** type checking
+
+<Info>
+  The build will fail if code doesn't pass validation. Always run `pnpm validate` before committing.
+</Info>
+
+## Using zipline-ctl
+
+Zipline includes a command-line tool for administrative tasks:
+
+<CodeGroup>
+```bash Build the CLI
+pnpm build:server
+```
+
+```bash Run commands
+pnpm ctl help
+```
+
+```bash Example: Create user
+pnpm ctl user create --username admin --password secure123
+```
+</CodeGroup>
+
+## Available scripts
+
+Here are all available npm scripts:
+
+<AccordionGroup>
+  <Accordion title="Development">
+    - `pnpm dev` - Start development server with debug logging
+    - `pnpm dev:nd` - Start development server without debug logging
+    - `pnpm dev:inspector` - Start with Node.js inspector on port 9229
+  </Accordion>
+
+  <Accordion title="Production">
+    - `pnpm build` - Build for production
+    - `pnpm start` - Run production server
+    - `pnpm start:inspector` - Run production server with inspector
+  </Accordion>
+
+  <Accordion title="Database">
+    - `pnpm db:migrate` - Create a new migration
+    - `pnpm db:prototype` - Push schema changes without migration
+  </Accordion>
+
+  <Accordion title="Code quality">
+    - `pnpm validate` - Run linting, formatting, and type checking
+  </Accordion>
+
+  <Accordion title="CLI">
+    - `pnpm ctl` - Run zipline-ctl commands
+    - `pnpm build:server` - Build the server and CLI
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Build fails with validation errors
+
+Run `pnpm validate` to identify and fix linting or formatting issues.
+
+### Database connection errors
+
+1. Verify PostgreSQL is running
+2. Check your `DATABASE_URL` in `.env`
+3. Ensure the database exists: `createdb zipline`
+
+### Module not found errors
+
+1. Delete `node_modules` and `pnpm-lock.yaml`
+2. Run `pnpm install` again
+3. Clear Prisma client: `rm -rf node_modules/.prisma`
+
+### Port already in use
+
+Change the `CORE_PORT` in your `.env` file to an available port.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="First steps" icon="rocket" href="/get-started/first-steps">
+    Create your admin account and configure basic settings
+  </Card>
+  <Card title="Configuration" icon="gear" href="/config/overview">
+    Explore all configuration options
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/development">
+    Learn how to contribute to Zipline
+  </Card>
+  <Card title="API reference" icon="code" href="/api/introduction">
+    Explore the Zipline API
+  </Card>
+</CardGroup>

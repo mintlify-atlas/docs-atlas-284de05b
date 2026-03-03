@@ -1,0 +1,349 @@
+---
+title: Embeds
+description: Customize how your files appear when shared on Discord, Twitter, and other platforms with OpenGraph and Twitter Card metadata
+---
+
+Zipline allows you to customize how your uploaded files appear when shared on social media platforms through OpenGraph and Twitter Card metadata. This creates rich previews with titles, descriptions, and images.
+
+## What are embeds?
+
+When you share a link on platforms like Discord, Twitter, or Slack, these services fetch metadata from the URL to display a rich preview. Zipline lets you control:
+
+- **Title** - The headline shown in the embed
+- **Description** - Descriptive text below the title  
+- **Color** - Accent color for the embed (Discord)
+- **Site name** - The name of your site
+- **Image/Video** - The actual file content
+
+## Enabling embeds
+
+Embeds are configured per-user in their view settings:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "view": {
+      "enabled": true,
+      "embed": true,
+      "embedTitle": "My File",
+      "embedDescription": "Check out this file!",
+      "embedColor": "#7289DA",
+      "embedSiteName": "My Zipline"
+    }
+  }'
+```
+
+<Info>
+When `view.enabled` is true, Zipline serves a special view page with embed metadata instead of the raw file.
+</Info>
+
+See the user view schema in `src/lib/db/models/user.ts:40-55`.
+
+## View settings structure
+
+```typescript
+{
+  enabled: boolean         // Enable view page
+  embed: boolean          // Enable embed metadata
+  embedTitle: string      // OpenGraph title
+  embedDescription: string // OpenGraph description
+  embedColor: string      // Discord embed color (hex)
+  embedSiteName: string   // og:site_name
+  align: 'left' | 'center' | 'right'  // Content alignment
+  showMimetype: boolean   // Show file type
+  showTags: boolean       // Show file tags
+  showFolder: boolean     // Show folder name
+  content: string         // Custom HTML/text content
+}
+```
+
+## Dynamic variables
+
+Embed fields support dynamic variables that are replaced with file-specific data:
+
+### Available variables
+
+- `{file.name}` - File name
+- `{file.size}` - File size (formatted)
+- `{file.type}` - MIME type
+- `{file.createdAt}` - Upload timestamp
+- `{user.username}` - Uploader username
+- `{user.id}` - Uploader user ID
+
+### Example usage
+
+```json
+{
+  "embedTitle": "{file.name}",
+  "embedDescription": "Uploaded by {user.username} • {file.size}",
+  "embedSiteName": "{user.username}'s Zipline"
+}
+```
+
+When a file named `screenshot.png` (2.5 MB) uploaded by `alice` is shared:
+
+```
+Title: screenshot.png
+Description: Uploaded by alice • 2.5 MB
+Site Name: alice's Zipline
+```
+
+Variable parsing happens in `src/client/ssr-view/server.tsx:171-210`.
+
+## How embeds are generated
+
+When `view.enabled` and `view.embed` are both true:
+
+1. **Request** - A visitor accesses `/u/abc123.png`
+2. **Redirect** - Zipline redirects to `/view/abc123.png`
+3. **SSR** - Server renders a view page with OpenGraph tags
+4. **Variables** - Dynamic variables are replaced with file data
+5. **Response** - HTML with `<meta>` tags is returned
+
+Social media crawlers read the `<meta>` tags to build the embed preview.
+
+## OpenGraph tags
+
+Zipline generates standard OpenGraph metadata:
+
+```html
+<meta property="og:title" content="screenshot.png" />
+<meta property="og:description" content="Uploaded by alice" />
+<meta property="og:site_name" content="My Zipline" />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://zipline.com/raw/abc123.png" />
+```
+
+For videos:
+```html
+<meta property="og:type" content="video.other" />
+<meta property="og:video" content="https://zipline.com/raw/video.mp4" />
+<meta property="og:video:type" content="video/mp4" />
+```
+
+## Twitter Card tags
+
+Zipline also includes Twitter Card metadata:
+
+```html
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="screenshot.png" />
+<meta name="twitter:description" content="Uploaded by alice" />
+<meta name="twitter:image" content="https://zipline.com/raw/abc123.png" />
+```
+
+## Discord embed color
+
+Discord supports custom embed colors using the `theme-color` meta tag:
+
+```html
+<meta name="theme-color" content="#7289DA" />
+```
+
+Set this via `embedColor`:
+
+```json
+{
+  "embedColor": "#7289DA"
+}
+```
+
+<Note>
+Colors must be valid hex codes (e.g., `#FF5733`). Discord will ignore invalid colors.
+</Note>
+
+## File type behavior
+
+Embed behavior varies by file type:
+
+### Images
+
+- Uses `og:image` and `twitter:image`
+- Image displays inline in most platforms
+- Recommended for photos, screenshots, artwork
+
+### Videos
+
+- Uses `og:video` and `og:video:type`
+- Some platforms embed video players
+- Formats: MP4, WebM, MOV
+
+### Text files
+
+- Always redirect to view page
+- No inline preview, just metadata
+- See `src/server/routes/files.dy.ts:30`
+
+### Other files
+
+- Generic link preview with file info
+- Download link provided
+- MIME type shown if `showMimetype` is enabled
+
+## View page customization
+
+Beyond embeds, the view page supports additional customization:
+
+### Content alignment
+
+```json
+{
+  "align": "center"
+}
+```
+
+Options: `left`, `center`, `right`
+
+### Custom content
+
+```json
+{
+  "content": "<p>Welcome to my files!</p>"
+}
+```
+
+HTML content displayed on the view page.
+
+### Metadata display
+
+```json
+{
+  "showMimetype": true,
+  "showTags": true,
+  "showFolder": true
+}
+```
+
+Controls which file metadata is visible on the view page.
+
+## Password-protected files
+
+Files with passwords always redirect to the view page:
+
+```typescript
+if (file.password) return res.redirect(`/view/${encodeURIComponent(file.name)}`);
+```
+
+The view page shows a password prompt. After authentication, the file is displayed with embed metadata.
+
+See `src/server/routes/files.dy.ts:31`.
+
+## Raw file access
+
+To bypass the view page and get raw files:
+
+```
+https://your-zipline.com/raw/abc123.png
+```
+
+The `/raw` route always returns the file directly, regardless of view settings.
+
+## Updating view settings
+
+Change your embed configuration:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "view": {
+      "embedTitle": "New Title",
+      "embedDescription": "Updated description"
+    }
+  }'
+```
+
+<Info>
+Only include the fields you want to change. Other view settings remain unchanged.
+</Info>
+
+See the implementation in `src/server/routes/api/user/index.ts:78-90`.
+
+## Disabling embeds
+
+To disable embeds but keep the view page:
+
+```json
+{
+  "view": {
+    "enabled": true,
+    "embed": false
+  }
+}
+```
+
+To disable the view page entirely:
+
+```json
+{
+  "view": {
+    "enabled": false
+  }
+}
+```
+
+Files will be served directly without metadata.
+
+## SSR implementation
+
+The embed metadata is generated server-side using React SSR:
+
+```typescript
+// src/client/ssr-view/server.tsx
+const meta = `
+  ${user?.view?.embedTitle && user.view.embed ? 
+    `<meta property="og:title" content="${parseString(user.view.embedTitle, data)}" />` 
+    : ''}
+  ${user?.view?.embedDescription && user.view.embed ? 
+    `<meta property="og:description" content="${parseString(user.view.embedDescription, data)}" />` 
+    : ''}
+  // ... more tags
+`;
+```
+
+The `parseString` function replaces variables with actual file data.
+
+## Testing embeds
+
+To preview how your embeds look:
+
+1. **Discord** - Paste the link in any channel
+2. **Twitter** - Use the [Card Validator](https://cards-dev.twitter.com/validator)
+3. **OpenGraph** - Use [OpenGraph.xyz](https://opengraph.xyz/)
+4. **Telegram** - Paste the link in a chat
+
+<Tip>
+Most platforms cache embed metadata for 24-48 hours. Changes may not appear immediately.
+</Tip>
+
+## FAQs
+
+<AccordionGroup>
+  <Accordion title="Why aren't my embeds showing on Discord?">
+    Make sure both `view.enabled` and `view.embed` are true. Also check that your files are publicly accessible (not password-protected). Discord may cache old metadata for up to 24 hours.
+  </Accordion>
+
+  <Accordion title="Can I have different embed settings for different files?">
+    No, embed settings are per-user, not per-file. All your files will use the same embed template with dynamic variables.
+  </Accordion>
+
+  <Accordion title="Do embeds work with password-protected files?">
+    Yes, but social media crawlers can't access the actual file. They'll show the metadata (title, description) but not the image/video preview.
+  </Accordion>
+
+  <Accordion title="Can I use custom fonts or styling in embeds?">
+    Embed appearance is controlled by the platform (Discord, Twitter, etc.). You can only customize the text content, color, and which file is displayed.
+  </Accordion>
+
+  <Accordion title="What happens if I don't set embed settings?">
+    Without embed settings, shared links will show basic information (URL, domain) without custom titles, descriptions, or previews.
+  </Accordion>
+</AccordionGroup>
+
+## See also
+
+- [Uploads](/concepts/uploads) - Learn about uploading files
+- [URL Shortening](/concepts/url-shortening) - Shorten links with custom metadata

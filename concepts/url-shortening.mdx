@@ -1,0 +1,377 @@
+---
+title: URL shortening
+description: Create short, shareable links with Zipline's URL shortener, featuring custom vanity URLs, password protection, and view limits
+---
+
+Zipline includes a built-in URL shortener that lets you create short, memorable links to any destination. It supports vanity URLs, password protection, view tracking, and automatic deletion.
+
+## How URL shortening works
+
+When you shorten a URL:
+
+1. **Request** - You provide a destination URL
+2. **Code generation** - A random code is generated (configurable length)
+3. **Vanity support** - Optionally use a custom vanity slug
+4. **Storage** - The mapping is saved to the database
+5. **URL return** - You receive a short link like `https://your-zipline.com/go/abc123`
+6. **Redirection** - Visitors are redirected to the destination
+
+## Creating short URLs
+
+### Via the dashboard
+
+1. Navigate to the URLs section
+2. Click "Shorten URL"
+3. Enter the destination URL
+4. Optionally configure:
+   - Custom vanity URL
+   - Password protection
+   - Maximum views
+   - Enable/disable state
+
+### Via the API
+
+Create a short URL with the API:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://example.com/very/long/url",
+    "vanity": "mylink"
+  }'
+```
+
+Response:
+```json
+{
+  "id": "url_abc123",
+  "code": "x7k2p9",
+  "vanity": "mylink",
+  "destination": "https://example.com/very/long/url",
+  "url": "https://your-zipline.com/go/mylink",
+  "views": 0,
+  "enabled": true,
+  "createdAt": "2026-03-03T10:00:00.000Z"
+}
+```
+
+## URL structure
+
+Each shortened URL in the database contains:
+
+```typescript
+{
+  id: string              // Unique URL ID
+  code: string            // Random generated code
+  vanity: string | null   // Custom vanity slug (optional)
+  destination: string     // Target URL
+  views: number           // View counter
+  maxViews: number | null // Auto-delete after N views
+  password: string | null // Hashed password
+  enabled: boolean        // Active/inactive state
+  userId: string          // Owner user ID
+}
+```
+
+See the Prisma schema at `prisma/schema.prisma:364-381`.
+
+## Vanity URLs
+
+Create memorable custom URLs instead of random codes:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://github.com/diced/zipline",
+    "vanity": "zipline-repo"
+  }'
+```
+
+Result: `https://your-zipline.com/go/zipline-repo`
+
+<Warning>
+Vanity URLs must be unique across the entire system. If a vanity is already taken, the request will fail with a 400 error.
+</Warning>
+
+Vanity validation happens in `src/server/routes/api/user/urls/index.ts:78-86`.
+
+## Configuration
+
+### URL route
+
+Configure the base path for shortened URLs:
+
+```typescript
+urlsRoute: "/go"  // Default route
+urlsLength: 6     // Code length for random generation
+```
+
+Examples:
+- `/go` → `https://zipline.com/go/abc123`
+- `/` → `https://zipline.com/abc123`
+- `/s` → `https://zipline.com/s/abc123`
+
+### Domain selection
+
+Return URLs with a specific domain:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Domain: short.domain.com" \
+  -H "Content-Type: application/json" \
+  -d '{"destination": "https://example.com"}'
+```
+
+Result: `https://short.domain.com/go/abc123`
+
+<Info>
+You can provide multiple domains separated by commas, and Zipline will randomly select one.
+</Info>
+
+## Password protection
+
+Protect URLs with a password:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Password: secret123" \
+  -H "Content-Type: application/json" \
+  -d '{"destination": "https://private-site.com"}'
+```
+
+When visitors access the URL, they'll be redirected to a password prompt view.
+
+To access with a password:
+```
+https://your-zipline.com/go/abc123?pw=secret123
+```
+
+### Updating passwords
+
+Change or remove a password:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/urls/url_id/password \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "newpassword"}'
+```
+
+Remove password protection:
+```bash
+curl -X PATCH https://your-zipline.com/api/user/urls/url_id/password \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"password": null}'
+```
+
+See `src/server/routes/api/user/urls/[id]/password.ts` for implementation.
+
+## View tracking and limits
+
+### View counter
+
+Every access to a shortened URL increments the view counter:
+
+```bash
+curl https://your-zipline.com/api/user/urls/url_id \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Response includes current views:
+```json
+{
+  "id": "url_abc123",
+  "views": 42,
+  ...
+}
+```
+
+### Maximum views
+
+Auto-delete URLs after a certain number of views:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Max-Views: 100" \
+  -H "Content-Type: application/json" \
+  -d '{"destination": "https://one-time-link.com"}'
+```
+
+After 100 views:
+- If `featuresDeleteOnMaxViews` is enabled, the URL is deleted
+- Otherwise, the URL returns a 404
+
+See the view tracking logic in `src/server/routes/urls.dy.ts:32-48`.
+
+## Managing URLs
+
+### Enable/disable URLs
+
+Temporarily disable a URL without deleting it:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://example.com",
+    "enabled": false
+  }'
+```
+
+Disabled URLs return a 404 until re-enabled:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/urls/url_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
+
+### Updating URLs
+
+Update URL properties:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/urls/url_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://new-destination.com",
+    "enabled": true
+  }'
+```
+
+<Note>
+You cannot change the code or vanity after creation. Create a new URL if you need a different slug.
+</Note>
+
+### Deleting URLs
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/urls/url_id \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+This permanently removes the URL mapping.
+
+## Searching URLs
+
+Search your shortened URLs by destination, vanity, or code:
+
+```bash
+curl "https://your-zipline.com/api/user/urls?searchField=destination&searchQuery=github" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Search fields:
+- `destination` - Search destination URLs
+- `vanity` - Search vanity slugs
+- `code` - Search generated codes
+
+The search is case-insensitive and uses substring matching.
+
+See `src/server/routes/api/user/urls/index.ts:145-184`.
+
+## URL quotas
+
+Users can have a maximum URL limit:
+
+```typescript
+quota: {
+  maxUrls: 1000  // Maximum shortened URLs
+}
+```
+
+Attempting to create URLs beyond the quota results in a 403 error:
+
+```json
+{
+  "error": "Shortening this URL would exceed your quota of 1000 URLs."
+}
+```
+
+Quota checking happens in `src/server/routes/api/user/urls/index.ts:53-61`.
+
+## Redirection behavior
+
+When a visitor accesses a shortened URL:
+
+1. **Lookup** - System finds URL by code or vanity
+2. **Validation** - Checks if enabled and under max views
+3. **Password check** - Redirects to password view if protected
+4. **View increment** - Increments the view counter
+5. **Redirect** - 302 redirect to destination
+
+See the full implementation in `src/server/routes/urls.dy.ts`.
+
+## Webhooks
+
+Zipline can trigger webhooks when URLs are shortened:
+
+```typescript
+httpWebhookOnShorten: "https://your-webhook.com/shorten"
+```
+
+Or Discord webhooks:
+```typescript
+discordOnShortenWebhookUrl: "https://discord.com/api/webhooks/..."
+```
+
+See `src/lib/webhooks/onShorten` for webhook implementation.
+
+## Text-only responses
+
+Get just the URL without JSON formatting:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-No-JSON: true" \
+  -H "Content-Type: application/json" \
+  -d '{"destination": "https://example.com"}'
+```
+
+Response (plain text):
+```
+https://your-zipline.com/go/abc123
+```
+
+This is useful for ShareX and other automation tools.
+
+## FAQs
+
+<AccordionGroup>
+  <Accordion title="What happens if two users try to use the same vanity?">
+    The first user to create the vanity URL gets it. The second request will fail with a 400 error indicating the vanity is already taken.
+  </Accordion>
+
+  <Accordion title="Can I change a URL's destination after creation?">
+    Yes, you can update the destination using a PATCH request to `/api/user/urls/:id`. The code/vanity remains the same.
+  </Accordion>
+
+  <Accordion title="How are random codes generated?">
+    Codes are generated using `randomCharacters()` with the configured length (default 6). The system checks for collisions and regenerates if needed.
+  </Accordion>
+
+  <Accordion title="Do disabled URLs count toward quotas?">
+    Yes, disabled URLs still count toward your quota. Delete the URL if you want to free up quota space.
+  </Accordion>
+
+  <Accordion title="Can I see who accessed my shortened URLs?">
+    Currently, Zipline only tracks the view count, not individual viewer information. View tracking happens in the `urls.dy.ts` route.
+  </Accordion>
+</AccordionGroup>
+
+## See also
+
+- [Uploads](/concepts/uploads) - Learn about file uploads
+- [Embeds](/concepts/embeds) - Customize link previews

@@ -1,0 +1,375 @@
+---
+title: Datasource Configuration
+description: Configure file storage backends including local filesystem and S3-compatible storage
+---
+
+Zipline supports multiple storage backends (datasources) for uploaded files. This page covers configuration for both local filesystem storage and S3-compatible object storage.
+
+## Datasource Types
+
+Zipline supports two datasource types:
+
+- **local** - Store files on the local filesystem
+- **s3** - Store files in S3-compatible object storage (AWS S3, MinIO, DigitalOcean Spaces, etc.)
+
+<ParamField path="DATASOURCE_TYPE" type="string" default="local">
+  The storage backend to use.
+  
+  ```bash
+  DATASOURCE_TYPE=local
+  # or
+  DATASOURCE_TYPE=s3
+  ```
+</ParamField>
+
+## Local Datasource
+
+The local datasource stores uploaded files directly on the server's filesystem. This is the simplest option and works well for single-server deployments.
+
+### Configuration
+
+<ParamField path="DATASOURCE_LOCAL_DIRECTORY" type="string" default="./uploads">
+  Absolute or relative path to the directory where files will be stored.
+  
+  ```bash
+  DATASOURCE_LOCAL_DIRECTORY=./uploads
+  # or absolute path
+  DATASOURCE_LOCAL_DIRECTORY=/var/lib/zipline/uploads
+  ```
+</ParamField>
+
+### Docker Configuration
+
+When using Docker, you must mount the uploads directory as a volume to persist files:
+
+```yaml
+services:
+  zipline:
+    image: ghcr.io/diced/zipline
+    volumes:
+      - './uploads:/zipline/uploads'
+    environment:
+      - DATASOURCE_TYPE=local
+      - DATASOURCE_LOCAL_DIRECTORY=/zipline/uploads
+```
+
+<Note>
+  The path specified in `DATASOURCE_LOCAL_DIRECTORY` should match the mount point inside the container.
+</Note>
+
+### Permissions
+
+Ensure the Zipline process has read and write permissions to the uploads directory:
+
+```bash
+mkdir -p /var/lib/zipline/uploads
+chown -R zipline:zipline /var/lib/zipline/uploads
+chmod 755 /var/lib/zipline/uploads
+```
+
+### Path Security
+
+Zipline validates all file paths to prevent directory traversal attacks. Attempted access to files outside the configured directory will be rejected.
+
+## S3 Datasource
+
+The S3 datasource stores files in S3-compatible object storage. This is ideal for:
+
+- Distributed deployments
+- Cloud hosting
+- Large-scale file storage
+- CDN integration
+
+### Required Configuration
+
+<ParamField path="DATASOURCE_S3_ACCESS_KEY_ID" type="string" required>
+  AWS access key ID or equivalent for S3-compatible services.
+  
+  ```bash
+  DATASOURCE_S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_SECRET_ACCESS_KEY" type="string" required>
+  AWS secret access key or equivalent for S3-compatible services.
+  
+  ```bash
+  DATASOURCE_S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_REGION" type="string" required>
+  AWS region or equivalent for S3-compatible services.
+  
+  ```bash
+  DATASOURCE_S3_REGION=us-west-2
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_BUCKET" type="string" required>
+  S3 bucket name where files will be stored.
+  
+  ```bash
+  DATASOURCE_S3_BUCKET=zipline-uploads
+  ```
+</ParamField>
+
+### Optional Configuration
+
+<ParamField path="DATASOURCE_S3_ENDPOINT" type="string" default="null">
+  Custom endpoint URL for S3-compatible services (not needed for AWS S3).
+  
+  ```bash
+  # DigitalOcean Spaces
+  DATASOURCE_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+  
+  # MinIO
+  DATASOURCE_S3_ENDPOINT=https://minio.example.com
+  
+  # Backblaze B2
+  DATASOURCE_S3_ENDPOINT=https://s3.us-west-002.backblazeb2.com
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_FORCE_PATH_STYLE" type="boolean" default="false">
+  Use path-style URLs (`https://endpoint/bucket/key`) instead of virtual-hosted-style (`https://bucket.endpoint/key`).
+  
+  Required for MinIO and some other S3-compatible services.
+  
+  ```bash
+  DATASOURCE_S3_FORCE_PATH_STYLE=true
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_SUBDIRECTORY" type="string" default="null">
+  Store all files within a subdirectory (prefix) in the bucket.
+  
+  ```bash
+  DATASOURCE_S3_SUBDIRECTORY=zipline
+  # Files will be stored as: bucket/zipline/filename
+  ```
+</ParamField>
+
+### S3 Provider Examples
+
+<AccordionGroup>
+  <Accordion title="AWS S3" icon="aws">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+    DATASOURCE_S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    DATASOURCE_S3_REGION=us-east-1
+    DATASOURCE_S3_BUCKET=my-zipline-files
+    ```
+    
+    Create IAM user with policy:
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:DeleteObject",
+            "s3:ListBucket"
+          ],
+          "Resource": [
+            "arn:aws:s3:::my-zipline-files",
+            "arn:aws:s3:::my-zipline-files/*"
+          ]
+        }
+      ]
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="MinIO" icon="database">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=minioadmin
+    DATASOURCE_S3_SECRET_ACCESS_KEY=minioadmin
+    DATASOURCE_S3_REGION=us-east-1
+    DATASOURCE_S3_BUCKET=zipline
+    DATASOURCE_S3_ENDPOINT=https://minio.example.com
+    DATASOURCE_S3_FORCE_PATH_STYLE=true
+    ```
+    
+    <Note>
+      MinIO requires `DATASOURCE_S3_FORCE_PATH_STYLE=true` and a custom endpoint.
+    </Note>
+  </Accordion>
+  
+  <Accordion title="DigitalOcean Spaces" icon="cloud">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=DO00EXAMPLE
+    DATASOURCE_S3_SECRET_ACCESS_KEY=secretkey
+    DATASOURCE_S3_REGION=nyc3
+    DATASOURCE_S3_BUCKET=my-zipline-space
+    DATASOURCE_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+    ```
+  </Accordion>
+  
+  <Accordion title="Backblaze B2" icon="server">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=keyID
+    DATASOURCE_S3_SECRET_ACCESS_KEY=applicationKey
+    DATASOURCE_S3_REGION=us-west-002
+    DATASOURCE_S3_BUCKET=my-zipline-bucket
+    DATASOURCE_S3_ENDPOINT=https://s3.us-west-002.backblazeb2.com
+    ```
+  </Accordion>
+  
+  <Accordion title="Cloudflare R2" icon="cloud">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=access-key-id
+    DATASOURCE_S3_SECRET_ACCESS_KEY=secret-access-key
+    DATASOURCE_S3_REGION=auto
+    DATASOURCE_S3_BUCKET=zipline
+    DATASOURCE_S3_ENDPOINT=https://account-id.r2.cloudflarestorage.com
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Connection Settings
+
+Zipline uses the following connection settings for S3:
+
+- **Connection timeout**: 10 seconds
+- **Socket timeout**: 120 seconds (2 minutes)
+- **Max sockets**: 1000
+- **Keep-alive**: Enabled
+
+These are optimized for reliability and performance with large file uploads.
+
+### Access Verification
+
+When Zipline starts with S3 datasource, it performs an access test:
+
+1. Creates a temporary test file in the bucket
+2. Reads the test file back
+3. Deletes the test file
+
+If any step fails, Zipline will refuse to start and log detailed error information.
+
+<Warning>
+  Ensure your S3 credentials have the following permissions:
+  - `s3:PutObject` - Upload files
+  - `s3:GetObject` - Download files
+  - `s3:DeleteObject` - Delete files
+  - `s3:ListBucket` - List bucket contents
+  - `s3:HeadObject` - Get file metadata
+</Warning>
+
+### Large File Handling
+
+For files larger than 5GB, Zipline automatically uses multipart operations:
+
+- **Multipart uploads**: Split large files into 25MB chunks (configurable via `CHUNKS_SIZE`)
+- **Multipart copy**: For rename operations on files >5GB
+- **Part size**: 5MB for multipart operations
+
+### Subdirectory Usage
+
+Using a subdirectory is helpful when:
+
+- Sharing a bucket with other applications
+- Organizing files by environment (production/staging)
+- Implementing bucket-level lifecycle policies
+
+```bash
+DATASOURCE_S3_SUBDIRECTORY=prod/zipline
+# Files stored as: bucket/prod/zipline/abc123.png
+```
+
+## Switching Datasources
+
+<Warning>
+  Changing datasources does not migrate existing files. You must manually migrate files from the old datasource to the new one.
+</Warning>
+
+To switch from local to S3:
+
+1. Configure S3 environment variables
+2. Upload existing files from local directory to S3 bucket
+3. Update `DATASOURCE_TYPE=s3`
+4. Restart Zipline
+
+To switch from S3 to local:
+
+1. Download all files from S3 bucket to local directory
+2. Update `DATASOURCE_TYPE=local` and `DATASOURCE_LOCAL_DIRECTORY`
+3. Restart Zipline
+
+## Performance Considerations
+
+### Local Datasource
+
+**Pros:**
+- Faster for small files (no network overhead)
+- Simpler configuration
+- Lower operating costs
+
+**Cons:**
+- Limited by disk space
+- Not suitable for distributed deployments
+- Requires volume mounts in containers
+
+### S3 Datasource
+
+**Pros:**
+- Virtually unlimited storage
+- High availability and durability
+- Works with distributed deployments
+- Can integrate with CDNs
+- Automatic backups (if configured)
+
+**Cons:**
+- Network latency
+- Storage and bandwidth costs
+- Requires internet connectivity
+- More complex configuration
+
+## Troubleshooting
+
+### Local Datasource Issues
+
+**Error: "Invalid path provided"**
+- Check directory permissions
+- Verify `DATASOURCE_LOCAL_DIRECTORY` is correct
+- Ensure directory exists
+
+**Error: "EACCES: permission denied"**
+- Fix directory permissions: `chmod 755 /path/to/uploads`
+- Ensure Zipline process user owns directory
+
+### S3 Datasource Issues
+
+**Error: "Access Denied"**
+- Verify IAM permissions include all required actions
+- Check bucket policy doesn't deny access
+- Ensure credentials are correct
+
+**Error: "InvalidAccessKeyId"**
+- Credentials are incorrect or expired
+- For MinIO/custom endpoints, verify access key format
+
+**Error: "NoSuchBucket"**
+- Bucket doesn't exist in specified region
+- Bucket name is incorrect
+- Region is incorrect
+
+**Connection timeout**
+- Check network connectivity
+- Verify endpoint URL is correct
+- Check firewall rules
+
+## Next Steps
+
+<Card title="Environment Variables" icon="list" href="/config/environment-variables">
+  Complete environment variable reference
+</Card>

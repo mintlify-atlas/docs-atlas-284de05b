@@ -1,0 +1,152 @@
+---
+title: Login
+description: Authenticate a user with username and password
+---
+
+## POST /api/auth/login
+
+Authenticates a user with their username and password credentials. Supports two-factor authentication (TOTP) when enabled for the user.
+
+### Request Body
+
+<ParamField body="username" type="string" required>
+  The user's username (trimmed, minimum 1 character)
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password (trimmed, minimum 1 character)
+</ParamField>
+
+<ParamField body="code" type="string">
+  TOTP code for two-factor authentication. Required if the user has TOTP enabled and this is a second login request.
+</ParamField>
+
+### Headers
+
+<ParamField header="x-zipline-client" type="string">
+  Optional client identifier for tracking the source of the request
+</ParamField>
+
+### Response
+
+<ResponseField name="user" type="object">
+  The authenticated user object (only returned on successful login)
+  
+  <Expandable title="User object properties">
+    <ResponseField name="id" type="string">
+      Unique user identifier
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      The user's username
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role: `USER`, `ADMIN`, or `SUPERADMIN`
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of account creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last account update
+    </ResponseField>
+    
+    <ResponseField name="view" type="object">
+      User view settings and preferences
+    </ResponseField>
+    
+    <ResponseField name="oauthProviders" type="array">
+      Array of connected OAuth providers
+    </ResponseField>
+    
+    <ResponseField name="totpSecret" type="string | null">
+      TOTP secret (if enabled)
+    </ResponseField>
+    
+    <ResponseField name="quota" type="object | null">
+      User quota settings
+    </ResponseField>
+    
+    <ResponseField name="avatar" type="string | null">
+      User avatar URL or data URI
+    </ResponseField>
+    
+    <ResponseField name="token" type="string">
+      API authentication token
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="totp" type="boolean">
+  Indicates that TOTP is enabled for this user. When `true`, the client should prompt for a TOTP code and make a second request with the `code` parameter.
+</ResponseField>
+
+### Rate Limiting
+
+This endpoint is rate limited to **2 requests per second**.
+
+### Authentication Flow
+
+1. **Initial request**: Send username and password
+2. **TOTP enabled**: If the user has TOTP enabled, the response will be `{ "totp": true }`
+3. **Second request**: Make another request with the same credentials plus the `code` parameter
+4. **Success**: Returns the user object and establishes a session
+
+### Error Responses
+
+- `400 Bad Request` - Invalid username or password
+- `400 Bad Request` - Invalid code (when TOTP code is incorrect)
+- `429 Too Many Requests` - Rate limit exceeded
+
+### Example Request
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "password": "securepassword123"
+  }'
+```
+
+### Example Response (No TOTP)
+
+```json
+{
+  "user": {
+    "id": "clx1234567890",
+    "username": "johndoe",
+    "role": "USER",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-03-01T14:22:00.000Z",
+    "view": {},
+    "oauthProviders": [],
+    "totpSecret": null,
+    "quota": null,
+    "avatar": null,
+    "token": "zpl_abc123def456ghi789"
+  }
+}
+```
+
+### Example Response (TOTP Enabled)
+
+```json
+{
+  "totp": true
+}
+```
+
+### Example Request with TOTP Code
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "password": "securepassword123",
+    "code": "123456"
+  }'
+```

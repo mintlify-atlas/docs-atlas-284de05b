@@ -1,0 +1,219 @@
+---
+title: 'Update Short URL'
+description: 'Update properties of an existing shortened URL'
+---
+
+Update an existing shortened URL's properties including destination, vanity, password, view limits, and enabled status.
+
+## Endpoint
+
+```http
+PATCH /api/user/urls/:id
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The ID of the URL to update
+</ParamField>
+
+## Request Body
+
+All fields are optional. Only include the fields you want to update.
+
+<ParamField body="destination" type="string">
+  New destination URL. Must be a valid HTTP/HTTPS URL.
+</ParamField>
+
+<ParamField body="vanity" type="string | null">
+  New vanity string. Set to `null` or empty string to remove the vanity. Must be unique if provided.
+</ParamField>
+
+<ParamField body="maxViews" type="number | null">
+  Maximum number of views. Set to `null` to remove the limit. Must be at least 0.
+</ParamField>
+
+<ParamField body="password" type="string | null">
+  New password for the URL. Set to `null` or empty string to remove password protection.
+</ParamField>
+
+<ParamField body="enabled" type="boolean">
+  Whether the URL should be active and redirect users.
+</ParamField>
+
+## Response
+
+Returns the updated URL object. Passwords are never included in the response.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the shortened URL
+</ResponseField>
+
+<ResponseField name="code" type="string" required>
+  Random code for the URL
+</ResponseField>
+
+<ResponseField name="vanity" type="string | null">
+  Custom vanity string, if set
+</ResponseField>
+
+<ResponseField name="destination" type="string" required>
+  The destination URL
+</ResponseField>
+
+<ResponseField name="views" type="number" required>
+  Number of times this URL has been accessed
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum number of views before the URL is disabled
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean" required>
+  Whether the URL is currently active
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the URL was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp of when the URL was last updated
+</ResponseField>
+
+<ResponseField name="userId" type="string | null">
+  ID of the user who created this URL
+</ResponseField>
+
+## Example Request
+
+```bash Update destination
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://new-destination.com"
+  }'
+```
+
+```bash Set vanity URL
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vanity": "my-custom-url"
+  }'
+```
+
+```bash Remove vanity
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vanity": null
+  }'
+```
+
+```bash Set password
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "secret123"
+  }'
+```
+
+```bash Remove password
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": null
+  }'
+```
+
+```bash Set max views
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "maxViews": 100
+  }'
+```
+
+```bash Disable URL
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+```
+
+```bash Update multiple properties
+curl -X PATCH "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://example.com/new-page",
+    "vanity": "new-vanity",
+    "maxViews": 500,
+    "enabled": true
+  }'
+```
+
+## Example Response
+
+```json 200 OK
+{
+  "id": "clx1234567890",
+  "code": "abc123",
+  "vanity": "my-custom-url",
+  "destination": "https://new-destination.com",
+  "views": 42,
+  "maxViews": 100,
+  "enabled": true,
+  "createdAt": "2024-03-01T10:30:00.000Z",
+  "updatedAt": "2024-03-01T14:20:00.000Z",
+  "userId": "user123"
+}
+```
+
+```json 400 Bad Request - Invalid password
+{
+  "error": "Bad Request",
+  "message": "password must be a string",
+  "statusCode": 400
+}
+```
+
+```json 400 Bad Request - Vanity exists
+{
+  "error": "Bad Request",
+  "message": "vanity already exists",
+  "statusCode": 400
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "URL not found",
+  "statusCode": 404
+}
+```
+
+## Notes
+
+- You can only update URLs you own
+- Passwords are hashed before storage
+- Setting password to `null` or empty string removes password protection
+- Setting vanity to `null` removes the custom vanity (the URL will use the random code)
+- Vanity strings must be unique across all URLs
+- The `destination` field must be a valid HTTP/HTTPS URL
+- The `code` field cannot be changed - it's permanently assigned when the URL is created
+- View counts are not affected by updates and continue to increment normally

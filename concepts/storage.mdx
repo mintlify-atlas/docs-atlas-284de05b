@@ -1,0 +1,424 @@
+---
+title: Storage
+description: Configure where Zipline stores your files with support for local filesystem and S3-compatible object storage
+---
+
+Zipline supports multiple storage backends (datasources) for storing uploaded files. You can use the local filesystem for simple deployments or S3-compatible object storage for scalability and redundancy.
+
+## Storage architecture
+
+All file operations in Zipline go through a unified datasource abstraction:
+
+```typescript
+abstract class Datasource {
+  abstract get(file: string): Readable | Promise<Readable | null>
+  abstract put(file: string, data: Buffer | string, options?: PutOptions): Promise<void>
+  abstract delete(file: string | string[]): Promise<void>
+  abstract size(file: string): Promise<number>
+  abstract totalSize(): Promise<number>
+  abstract range(file: string, start: number, end: number): Promise<Readable>
+  abstract rename(from: string, to: string): Promise<void>
+  abstract list(options: ListOptions): Promise<string[]>
+}
+```
+
+This allows Zipline to support multiple storage backends with the same API.
+
+See `src/lib/datasource/Datasource.ts` for the full interface.
+
+## Available datasources
+
+Zipline currently supports two datasource types:
+
+1. **Local** - Stores files on the server's filesystem
+2. **S3** - Stores files in S3-compatible object storage
+
+## Local storage
+
+### Configuration
+
+Configure local storage in your environment:
+
+```bash
+DATASOURCE_TYPE=local
+DATASOURCE_LOCAL_DIRECTORY=/var/lib/zipline/uploads
+```
+
+Or via config file:
+```typescript
+{
+  datasource: {
+    type: 'local',
+    local: {
+      directory: '/var/lib/zipline/uploads'
+    }
+  }
+}
+```
+
+### How it works
+
+The local datasource:
+
+1. **Stores files** in the specified directory
+2. **Uses the filesystem** for all operations
+3. **Optimizes uploads** by moving temp files instead of copying
+4. **Validates paths** to prevent directory traversal attacks
+
+See the implementation in `src/lib/datasource/Local.ts`.
+
+### File operations
+
+#### Uploading
+
+When a file is uploaded:
+1. Saved to temp directory (configured via `coreTempDirectory`)
+2. Validated and processed
+3. Moved to the datasource directory using `copyFile` + `rm`
+4. Original temp file deleted
+
+See `src/lib/datasource/Local.ts:41-63`.
+
+#### Reading
+
+Files are read as Node.js streams:
+
+```typescript
+const stream = datasource.get('abc123.png');
+// Returns a ReadStream from createReadStream()
+```
+
+#### Deleting
+
+Files are deleted using Node's `rm` function:
+
+```typescript
+await datasource.delete('abc123.png');
+// Or batch delete
+await datasource.delete(['file1.png', 'file2.jpg']);
+```
+
+### Path security
+
+The local datasource validates all file paths:
+
+```typescript
+private resolvePath(file: string): string | void {
+  const resolved = resolve(this.dir, file);
+  const uploadsDir = resolve(this.dir);
+  
+  if (!resolved.startsWith(uploadsDir + sep)) return;
+  return resolved;
+}
+```
+
+This prevents directory traversal attacks like `../../etc/passwd`.
+
+### Advantages
+
+- Simple setup
+- No external dependencies
+- Fast for single-server deployments
+- Direct filesystem access
+
+### Limitations
+
+- Not suitable for multi-server deployments
+- No built-in redundancy
+- Backups require filesystem-level tools
+- Storage limited to single disk/partition
+
+## S3 storage
+
+### Configuration
+
+Configure S3-compatible storage:
+
+```bash
+DATASOURCE_TYPE=s3
+DATASOURCE_S3_ACCESS_KEY_ID=your_access_key
+DATASOURCE_S3_SECRET_ACCESS_KEY=your_secret_key
+DATASOURCE_S3_BUCKET=zipline-uploads
+DATASOURCE_S3_REGION=us-east-1
+```
+
+For S3-compatible services (MinIO, Backblaze B2, etc.):
+
+```bash
+DATASOURCE_S3_ENDPOINT=https://s3.example.com
+DATASOURCE_S3_FORCE_PATH_STYLE=true
+```
+
+Optional subdirectory:
+```bash
+DATASOURCE_S3_SUBDIRECTORY=zipline/uploads
+```
+
+### How it works
+
+The S3 datasource:
+
+1. **Uses AWS SDK v3** (`@aws-sdk/client-s3`)
+2. **Validates access** on startup by testing read/write/delete
+3. **Streams uploads** from disk to minimize memory usage
+4. **Handles large files** with multipart operations
+5. **Supports subdirectories** for organizing files within a bucket
+
+See the implementation in `src/lib/datasource/S3.ts`.
+
+### Startup validation
+
+When Zipline starts with S3 storage:
+
+```typescript
+private async ensureReadWriteAccess() {
+  // 1. Create test object
+  const putObject = new PutObjectCommand({ ... });
+  await this.client.send(putObject);
+  
+  // 2. Read test object
+  const readObject = new GetObjectCommand({ ... });
+  await this.client.send(readObject);
+  
+  // 3. Delete test object
+  const deleteObject = new DeleteObjectCommand({ ... });
+  await this.client.send(deleteObject);
+}
+```
+
+If any operation fails, Zipline exits with an error.
+
+See `src/lib/datasource/S3.ts:81-139`.
+
+### File operations
+
+#### Uploading
+
+Files are uploaded using `PutObjectCommand`:
+
+```typescript
+// For buffers
+const command = new PutObjectCommand({
+  Bucket: this.options.bucket,
+  Key: this.key(file),
+  Body: buffer,
+  ContentType: mimetype
+});
+
+// For streams
+const readStream = createReadStream(tempPath);
+const command = new PutObjectCommand({
+  Bucket: this.options.bucket,
+  Key: this.key(file),
+  Body: readStream,
+  ContentType: mimetype
+});
+```
+
+See `src/lib/datasource/S3.ts:167-199`.
+
+#### Reading
+
+Files are retrieved as streams:
+
+```typescript
+const command = new GetObjectCommand({
+  Bucket: this.options.bucket,
+  Key: this.key(file)
+});
+
+const res = await this.client.send(command);
+return Readable.fromWeb(res.Body.transformToWebStream());
+```
+
+#### Range requests
+
+For video streaming and partial content:
+
+```typescript
+const command = new GetObjectCommand({
+  Bucket: this.options.bucket,
+  Key: this.key(file),
+  Range: `bytes=${start}-${end}`
+});
+```
+
+Returns a 206 Partial Content response.
+
+See `src/lib/datasource/S3.ts:303-327`.
+
+### Large file operations
+
+For files larger than 5GB, S3 uses multipart copy:
+
+```typescript
+// 1. Initiate multipart upload
+const createCommand = new CreateMultipartUploadCommand({ ... });
+const { UploadId } = await this.client.send(createCommand);
+
+// 2. Copy parts (5MB chunks)
+for (let start = 0, part = 1; start < size; start += partSize, part++) {
+  const uploadPartCopyCommand = new UploadPartCopyCommand({
+    CopySourceRange: `bytes=${start}-${end}`,
+    PartNumber: part,
+    UploadId
+  });
+  await this.client.send(uploadPartCopyCommand);
+}
+
+// 3. Complete multipart upload
+const completeCommand = new CompleteMultipartUploadCommand({ ... });
+await this.client.send(completeCommand);
+```
+
+See `src/lib/datasource/S3.ts:329-416`.
+
+### Subdirectories
+
+Organize files within a bucket using subdirectories:
+
+```typescript
+public key(path: string): string {
+  if (this.options.subdirectory) {
+    return this.options.subdirectory.endsWith('/')
+      ? this.options.subdirectory + path
+      : this.options.subdirectory + '/' + path;
+  }
+  return path;
+}
+```
+
+Example: With `subdirectory: 'zipline'`, file `abc123.png` becomes `zipline/abc123.png`.
+
+### Connection pooling
+
+S3 datasource uses connection pooling for performance:
+
+```typescript
+requestHandler: new NodeHttpHandler({
+  connectionTimeout: 10_000,
+  socketTimeout: 120_000,
+  httpAgent: new HttpAgent({
+    maxSockets: 1000,
+    keepAlive: true
+  }),
+  httpsAgent: new HttpsAgent({
+    maxSockets: 1000,
+    keepAlive: true
+  })
+})
+```
+
+See `src/lib/datasource/S3.ts:54-65`.
+
+### Advantages
+
+- Highly scalable
+- Built-in redundancy
+- Multi-server support
+- Automatic backups (depending on provider)
+- Geographic distribution
+- Pay-per-use pricing
+
+### Limitations
+
+- Requires external service
+- Network latency for operations
+- Egress costs (downloading)
+- More complex setup
+
+## Switching datasources
+
+<Warning>
+Switching datasources requires migrating all existing files. There is no built-in migration tool.
+</Warning>
+
+To switch from local to S3:
+
+1. **Upload existing files** to S3 bucket manually
+2. **Update configuration** to use S3 datasource
+3. **Update database** if file paths changed
+4. **Restart Zipline**
+5. **Verify** files are accessible
+6. **Delete old local files** after confirming migration
+
+To switch from S3 to local:
+
+1. **Download all files** from S3 to local directory
+2. **Update configuration** to use local datasource
+3. **Restart Zipline**
+4. **Verify** files are accessible
+
+## Storage statistics
+
+### Total size
+
+Get total storage usage:
+
+```typescript
+const totalBytes = await datasource.totalSize();
+console.log(`Total storage: ${bytes(totalBytes)}`);
+```
+
+**Local implementation**: Iterates through all files and sums sizes
+
+**S3 implementation**: Uses `ListObjectsCommand` and sums `ContentLength`
+
+### Individual file size
+
+```typescript
+const fileSize = await datasource.size('abc123.png');
+```
+
+**Local**: Uses `stat()` to get file size
+
+**S3**: Uses `HeadObjectCommand` to get metadata
+
+## Temporary directory
+
+All uploads are initially saved to a temporary directory:
+
+```bash
+CORE_TEMP_DIRECTORY=/tmp/zipline
+```
+
+Default: `os.tmpdir() + '/zipline'`
+
+The temp directory is used for:
+- Initial file reception
+- Image compression
+- GPS metadata removal
+- Chunked upload assembly
+
+<Info>
+Temp files are automatically cleaned up after upload completes or fails.
+</Info>
+
+## FAQs
+
+<AccordionGroup>
+  <Accordion title="Can I use multiple datasources simultaneously?">
+    No, Zipline uses a single datasource for all files. You cannot mix local and S3 storage within the same instance.
+  </Accordion>
+
+  <Accordion title="What S3-compatible services are supported?">
+    Any S3-compatible service works: AWS S3, MinIO, Backblaze B2, DigitalOcean Spaces, Wasabi, Cloudflare R2, etc. Use the `endpoint` and `forcePathStyle` options for non-AWS services.
+  </Accordion>
+
+  <Accordion title="How do I backup my files?">
+    For **local storage**, use filesystem backup tools (rsync, tar, etc.). For **S3 storage**, use S3 versioning, cross-region replication, or bucket lifecycle policies.
+  </Accordion>
+
+  <Accordion title="Can I use network-attached storage (NAS) with local datasource?">
+    Yes, mount your NAS to the server and point `DATASOURCE_LOCAL_DIRECTORY` to the mount point. Ensure proper permissions and network reliability.
+  </Accordion>
+
+  <Accordion title="What happens if S3 is unavailable?">
+    Uploads will fail and return errors. Zipline validates S3 access on startup, so if S3 is down when Zipline starts, it will exit with an error. Consider using S3's built-in redundancy.
+  </Accordion>
+</AccordionGroup>
+
+## See also
+
+- [Uploads](/concepts/uploads) - Learn how file uploads work
+- [Folders](/concepts/folders) - Organize your files

@@ -1,0 +1,155 @@
+---
+title: Delete File
+description: Permanently delete a file from the server
+---
+
+<RequestExample>
+```bash cURL
+curl -X DELETE "https://your-zipline.com/api/user/files/clxyz123" \
+  -H "Authorization: YOUR_TOKEN"
+```
+</RequestExample>
+
+## DELETE /api/user/files/:id
+
+Permanently delete a file from both the database and the datasource storage.
+
+<Warning>
+  This action is irreversible. The file will be permanently deleted from the server.
+</Warning>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The file ID or file name to delete. Both the unique file ID (`clxyz123`) and the file name on server (`abc123.png`) are accepted.
+</ParamField>
+
+### Response
+
+Returns the deleted file object with the same structure as the [Get File](/api/files/get) endpoint.
+
+<ResponseField name="id" type="string">
+  Unique file identifier of the deleted file
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  File name that was on the server
+</ResponseField>
+
+<ResponseField name="originalName" type="string | null">
+  Original name of the uploaded file
+</ResponseField>
+
+<ResponseField name="size" type="number">
+  File size in bytes
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  MIME type of the file
+</ResponseField>
+
+<ResponseField name="views" type="number">
+  Number of times the file was viewed before deletion
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum allowed views that was set
+</ResponseField>
+
+<ResponseField name="favorite" type="boolean">
+  Whether the file was marked as favorite
+</ResponseField>
+
+<ResponseField name="password" type="boolean">
+  Whether the file was password-protected
+</ResponseField>
+
+<ResponseField name="folderId" type="string | null">
+  ID of the folder that contained this file
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of file creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+<ResponseField name="deletesAt" type="string | null">
+  ISO 8601 timestamp of scheduled deletion
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  The URL that was used to access the file (now inactive)
+</ResponseField>
+
+<ResponseField name="thumbnail" type="object | null">
+  Thumbnail information that was available
+  
+  <Expandable title="Thumbnail properties">
+    <ResponseField name="path" type="string">
+      Path to the thumbnail file
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="tags" type="array">
+  Array of tag objects that were associated with this file
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "id": "clxyz123",
+  "name": "abc123.png",
+  "originalName": "screenshot.png",
+  "size": 152400,
+  "type": "image/png",
+  "views": 42,
+  "maxViews": null,
+  "favorite": false,
+  "password": false,
+  "folderId": null,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T10:30:00.000Z",
+  "deletesAt": null,
+  "url": "https://your-zipline.com/u/abc123.png",
+  "thumbnail": {
+    "path": "/thumbnails/abc123.jpg"
+  },
+  "tags": [
+    {
+      "id": "tag1",
+      "name": "screenshots",
+      "color": "#3b82f6",
+      "createdAt": "2024-01-10T08:00:00.000Z",
+      "updatedAt": "2024-01-10T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Error Responses
+
+<ResponseField name="404 Not Found">
+  The file does not exist, or you don't have permission to delete it.
+</ResponseField>
+
+### Permissions
+
+You can only delete files that:
+- You own, OR
+- Belong to a user with a lower role than yours (if you're an admin/superadmin)
+
+### What Gets Deleted
+
+1. **Database Record**: The file entry is removed from the database
+2. **Physical File**: The actual file is deleted from the datasource storage
+3. **Thumbnail**: Associated thumbnail is automatically deleted via cascade
+4. **Tags**: Tag associations are removed (tags themselves are preserved)
+
+<Note>
+  The deletion is logged with the username, file name, size, and owner ID for audit purposes.
+</Note>

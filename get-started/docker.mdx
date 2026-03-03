@@ -1,0 +1,252 @@
+---
+title: Install with Docker
+description: Deploy Zipline using Docker Compose for a quick and reliable setup
+---
+
+Docker is the recommended way to run Zipline in production. This guide will walk you through setting up Zipline using Docker Compose with PostgreSQL.
+
+## Prerequisites
+
+- Docker and Docker Compose installed on your system
+- Basic understanding of Docker and environment variables
+- At least 1GB of available disk space
+
+## Setup
+
+<Steps>
+  <Step title="Create project directory">
+    Create a new directory for your Zipline installation:
+
+    ```bash
+    mkdir zipline && cd zipline
+    ```
+  </Step>
+
+  <Step title="Create docker-compose.yml">
+    Create a `docker-compose.yml` file with the following configuration:
+
+    ```yml docker-compose.yml
+    services:
+      postgresql:
+        image: postgres:16
+        restart: unless-stopped
+        env_file:
+          - .env
+        environment:
+          POSTGRES_USER: ${POSTGRESQL_USER:-zipline}
+          POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD:?POSTGRESQL_PASSWORD is required}
+          POSTGRES_DB: ${POSTGRESQL_DB:-zipline}
+        volumes:
+          - pgdata:/var/lib/postgresql/data
+        healthcheck:
+          test: ['CMD', 'pg_isready', '-U', 'zipline']
+          interval: 10s
+          timeout: 5s
+          retries: 5
+
+      zipline:
+        image: ghcr.io/diced/zipline:latest
+        restart: unless-stopped
+        ports:
+          - '3000:3000'
+        env_file:
+          - .env
+        environment:
+          - DATABASE_URL=postgres://${POSTGRESQL_USER:-zipline}:${POSTGRESQL_PASSWORD}@postgresql:5432/${POSTGRESQL_DB:-zipline}
+        depends_on:
+          postgresql:
+            condition: service_healthy
+        volumes:
+          - './uploads:/zipline/uploads'
+          - './public:/zipline/public'
+          - './themes:/zipline/themes'
+        healthcheck:
+          test: ['CMD', 'wget', '-q', '--spider', 'http://0.0.0.0:3000/api/healthcheck']
+          interval: 15s
+          timeout: 2s
+          retries: 2
+
+    volumes:
+      pgdata:
+    ```
+
+    <Tip>
+      The configuration includes health checks to ensure services start in the correct order and are running properly.
+    </Tip>
+  </Step>
+
+  <Step title="Generate secrets">
+    Generate secure random secrets for your installation:
+
+    ```bash
+    echo "POSTGRESQL_PASSWORD=$(openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32 | tr -d '\n')" > .env
+    echo "CORE_SECRET=$(openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32 | tr -d '\n')" >> .env
+    ```
+
+    <Warning>
+      The `CORE_SECRET` environment variable is **required**. Zipline will not start without it. Make sure it's at least 32 characters long.
+    </Warning>
+  </Step>
+
+  <Step title="Start Zipline">
+    Start the containers:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    Check the logs to ensure everything started correctly:
+
+    ```bash
+    docker compose logs -f zipline
+    ```
+  </Step>
+
+  <Step title="Access Zipline">
+    Once started, Zipline will be available at:
+
+    ```
+    http://localhost:3000
+    ```
+
+    You can now proceed to the [first steps guide](/get-started/first-steps) to create your admin account.
+  </Step>
+</Steps>
+
+## Understanding volumes
+
+The Docker Compose configuration mounts three volumes:
+
+<AccordionGroup>
+  <Accordion title="./uploads - User uploads">
+    This folder stores all user-uploaded files when using local storage (the default).
+
+    **Mount point:** `/zipline/uploads`
+
+    If you want to change the upload directory, set the `DATASOURCE_LOCAL_DIRECTORY` environment variable and update the volume mapping accordingly.
+  </Accordion>
+
+  <Accordion title="./public - Public assets">
+    This folder contains public assets and static files.
+
+    **Mount point:** `/zipline/public` (must not be changed)
+  </Accordion>
+
+  <Accordion title="./themes - Custom themes">
+    This folder contains custom theme files for UI customization.
+
+    **Mount point:** `/zipline/themes` (must not be changed)
+  </Accordion>
+</AccordionGroup>
+
+## Common configurations
+
+### Change port and hostname
+
+By default, Zipline binds to `0.0.0.0:3000`. To change this, add to your `.env` file:
+
+```bash .env
+CORE_PORT=80
+CORE_HOSTNAME=localhost
+```
+
+<Note>
+  If you change the port, update the `ports` section in `docker-compose.yml` accordingly.
+</Note>
+
+### Change upload directory
+
+To store uploads in a different location:
+
+```bash .env
+DATASOURCE_LOCAL_DIRECTORY=/path/to/your/local/files
+# or relative to the working directory
+DATASOURCE_LOCAL_DIRECTORY=./my-custom-uploads
+```
+
+Then update the volume mapping in `docker-compose.yml`:
+
+```yml
+volumes:
+  - './my-custom-uploads:/zipline/my-custom-uploads'
+```
+
+### Use S3 storage
+
+To use S3-compatible storage instead of local files, add to your `.env` file:
+
+```bash .env
+DATASOURCE_TYPE=s3
+
+DATASOURCE_S3_ACCESS_KEY_ID=your_access_key_id
+DATASOURCE_S3_SECRET_ACCESS_KEY=your_secret_key
+DATASOURCE_S3_BUCKET=zipline
+DATASOURCE_S3_REGION=us-west-2
+
+# Optional: for non-AWS S3 providers
+# DATASOURCE_S3_ENDPOINT=https://s3.example.com
+# DATASOURCE_S3_FORCE_PATH_STYLE=true
+```
+
+<Info>
+  When using S3 storage, you can remove the `./uploads` volume mount from the docker-compose.yml file. See the [datasource configuration](/config/datasource) for more options.
+</Info>
+
+## Updating Zipline
+
+To update to the latest version:
+
+<CodeGroup>
+```bash Pull latest image
+docker compose pull zipline
+```
+
+```bash Restart container
+docker compose up -d zipline
+```
+
+```bash View logs
+docker compose logs -f zipline
+```
+</CodeGroup>
+
+<Warning>
+  Always backup your database and uploads before updating. Zipline will automatically run database migrations on startup.
+</Warning>
+
+## Troubleshooting
+
+### Container won't start
+
+1. Check the logs: `docker compose logs zipline`
+2. Verify your `.env` file contains `CORE_SECRET` (at least 32 characters)
+3. Ensure PostgreSQL is healthy: `docker compose ps`
+
+### Cannot access Zipline
+
+1. Verify the container is running: `docker compose ps`
+2. Check if port 3000 is already in use: `netstat -tuln | grep 3000`
+3. Review firewall settings if accessing from another machine
+
+### Database connection issues
+
+1. Ensure PostgreSQL container is healthy: `docker compose ps`
+2. Verify `DATABASE_URL` in your environment matches PostgreSQL credentials
+3. Check PostgreSQL logs: `docker compose logs postgresql`
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="First steps" icon="rocket" href="/get-started/first-steps">
+    Create your admin account and configure basic settings
+  </Card>
+  <Card title="Configuration" icon="gear" href="/config/overview">
+    Explore all configuration options
+  </Card>
+  <Card title="ShareX setup" icon="share-nodes" href="/integrations/sharex">
+    Configure ShareX to upload to your instance
+  </Card>
+  <Card title="API reference" icon="code" href="/api/introduction">
+    Learn about the Zipline API
+  </Card>
+</CardGroup>

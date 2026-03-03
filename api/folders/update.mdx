@@ -1,0 +1,233 @@
+---
+title: 'Update Folder'
+description: 'Update folder properties or move it to a different parent'
+---
+
+Update an existing folder's properties such as name, visibility, upload permissions, or parent folder.
+
+## Endpoint
+
+```http
+PATCH /api/user/folders/:id
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The ID of the folder to update
+</ParamField>
+
+## Request Body
+
+All fields are optional. Only include the fields you want to update.
+
+<ParamField body="name" type="string">
+  New name for the folder (will be trimmed of whitespace)
+</ParamField>
+
+<ParamField body="isPublic" type="boolean">
+  Set folder visibility. When `true`, the folder is publicly accessible.
+</ParamField>
+
+<ParamField body="allowUploads" type="boolean">
+  Whether to allow uploads to this folder
+</ParamField>
+
+<ParamField body="parentId" type="string | null">
+  ID of the new parent folder. Set to `null` to make it a root folder. Cannot move a folder to itself or its descendants.
+</ParamField>
+
+## Response
+
+Returns the updated folder object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the folder
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The folder name
+</ResponseField>
+
+<ResponseField name="public" type="boolean" required>
+  Whether the folder is publicly accessible
+</ResponseField>
+
+<ResponseField name="allowUploads" type="boolean" required>
+  Whether uploads are allowed to this folder
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the folder was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp of when the folder was last updated
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  ID of the user who owns this folder
+</ResponseField>
+
+<ResponseField name="parentId" type="string | null">
+  ID of the parent folder, or `null` if this is a root folder
+</ResponseField>
+
+<ResponseField name="files" type="array">
+  Array of file objects in this folder
+</ResponseField>
+
+<ResponseField name="_count" type="object">
+  Counts of related entities
+  
+  <Expandable title="Count properties">
+    <ResponseField name="children" type="number">
+      Number of child folders
+    </ResponseField>
+    <ResponseField name="files" type="number">
+      Number of files in this folder
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="parent" type="object | null">
+  Parent folder information
+  
+  <Expandable title="Parent properties">
+    <ResponseField name="id" type="string">
+      Parent folder ID
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Parent folder name
+    </ResponseField>
+    <ResponseField name="parentId" type="string | null">
+      ID of the parent's parent folder
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+```bash Rename folder
+curl -X PATCH "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "New Folder Name"
+  }'
+```
+
+```bash Make folder public
+curl -X PATCH "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isPublic": true
+  }'
+```
+
+```bash Allow uploads
+curl -X PATCH "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "allowUploads": true
+  }'
+```
+
+```bash Move to different parent
+curl -X PATCH "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parentId": "parent_folder_id"
+  }'
+```
+
+```bash Move to root level
+curl -X PATCH "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parentId": null
+  }'
+```
+
+```bash Update multiple properties
+curl -X PATCH "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Public Gallery",
+    "isPublic": true,
+    "allowUploads": true
+  }'
+```
+
+## Example Response
+
+```json 200 OK
+{
+  "id": "clx1234567890",
+  "name": "New Folder Name",
+  "public": false,
+  "allowUploads": true,
+  "createdAt": "2024-03-01T10:30:00.000Z",
+  "updatedAt": "2024-03-01T14:45:00.000Z",
+  "userId": "user123",
+  "parentId": "parent123",
+  "files": [],
+  "_count": {
+    "children": 2,
+    "files": 5
+  },
+  "parent": {
+    "id": "parent123",
+    "name": "Parent Folder",
+    "parentId": null
+  }
+}
+```
+
+```json 400 Bad Request - Circular reference
+{
+  "error": "Bad Request",
+  "message": "A folder cannot be its own parent",
+  "statusCode": 400
+}
+```
+
+```json 400 Bad Request - Moving to descendant
+{
+  "error": "Bad Request",
+  "message": "Cannot move folder into one of its descendants",
+  "statusCode": 400
+}
+```
+
+```json 403 Forbidden
+{
+  "error": "Forbidden",
+  "message": "Parent folder does not belong to you",
+  "statusCode": 403
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "Folder not found",
+  "statusCode": 404
+}
+```
+
+## Notes
+
+- You can only update folders you own (unless you're an admin)
+- The API prevents circular references - you cannot move a folder into itself or its descendants
+- Setting `parentId` to `null` moves the folder to the root level
+- All property updates are atomic - either all succeed or none do

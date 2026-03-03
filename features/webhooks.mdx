@@ -1,0 +1,345 @@
+---
+title: Webhooks
+description: Send notifications to Discord or HTTP endpoints when files are uploaded or URLs are shortened
+---
+
+Zipline can send webhook notifications when files are uploaded or URLs are shortened, allowing you to integrate with external services or receive real-time notifications.
+
+## Webhook Types
+
+<CardGroup cols={2}>
+  <Card title="Discord Webhooks" icon="discord">
+    Send rich embeds to Discord channels with file information
+  </Card>
+  <Card title="HTTP Webhooks" icon="webhook">
+    Send JSON payloads to custom HTTP endpoints
+  </Card>
+</CardGroup>
+
+## Discord Webhooks
+
+Discord webhooks send rich embed messages to Discord channels with customizable content and formatting.
+
+### Configuration
+
+Configure Discord webhooks in your database:
+
+```prisma
+model Zipline {
+  discordWebhookUrl String?  // Global webhook URL
+  discordUsername   String?
+  discordAvatarUrl  String?
+  
+  // Upload-specific webhooks
+  discordOnUploadWebhookUrl String?
+  discordOnUploadUsername   String?
+  discordOnUploadAvatarUrl  String?
+  discordOnUploadContent    String?
+  discordOnUploadEmbed      Json?
+  
+  // Shorten-specific webhooks
+  discordOnShortenWebhookUrl String?
+  discordOnShortenUsername   String?
+  discordOnShortenAvatarUrl  String?
+  discordOnShortenContent    String?
+  discordOnShortenEmbed      Json?
+}
+```
+
+### Setting Up Discord Webhooks
+
+<Steps>
+  <Step title="Create Discord Webhook">
+    In your Discord server, go to Server Settings > Integrations > Webhooks and create a new webhook.
+  </Step>
+  
+  <Step title="Copy Webhook URL">
+    Copy the webhook URL (e.g., `https://discord.com/api/webhooks/123456/abcdef`).
+  </Step>
+  
+  <Step title="Configure in Zipline">
+    Set the webhook URL in your database configuration, either globally or per-event.
+  </Step>
+  
+  <Step title="Customize Embed (Optional)">
+    Configure custom embed content, colors, and formatting.
+  </Step>
+</Steps>
+
+### Embed Customization
+
+You can customize Discord embeds using template variables:
+
+**Available Variables:**
+- `{user.username}` - Username of the uploader
+- `{user.id}` - User ID
+- `{file.name}` - File name
+- `{file.size}` - File size
+- `{file.type}` - MIME type
+- `{link.raw}` - Direct file URL
+- `{url.destination}` - Shortened URL destination
+- `{url.code}` - Short URL code
+
+**Example Embed Configuration:**
+
+```json
+{
+  "title": "New File Uploaded",
+  "description": "{user.username} uploaded {file.name}",
+  "color": "#5865F2",
+  "timestamp": true,
+  "footer": "Zipline File Upload",
+  "thumbnail": true,
+  "imageOrVideo": true
+}
+```
+
+### Discord Webhook Payload
+
+The webhook sends a payload to Discord:
+
+```json
+{
+  "username": "Zipline",
+  "avatar_url": "https://example.com/avatar.png",
+  "content": "File uploaded!",
+  "embeds": [
+    {
+      "title": "New Upload",
+      "description": "user123 uploaded image.png",
+      "color": 5814015,
+      "timestamp": "2024-01-20T10:30:00.000Z",
+      "footer": {
+        "text": "Zipline"
+      },
+      "image": {
+        "url": "https://i.example.com/abc123.png"
+      }
+    }
+  ]
+}
+```
+
+### Implementation Reference
+
+The Discord webhook implementation can be found at `src/lib/webhooks/discord.ts:114`:
+
+```typescript
+export async function onUpload(
+  config: Config,
+  { user, file, link }: { user: User; file: File; link: ParseValue['link'] },
+) {
+  if (!config.discord?.onUpload) return;
+
+  const webhookUrl = config.discord?.onUpload?.webhookUrl || config.discord?.webhookUrl;
+  if (!webhookUrl) return;
+
+  const content = parseContent(config, config.discord?.onUpload, { user, file, link });
+  const response = buildResponse(content, file);
+
+  await fetch(content.webhookUrl!, {
+    method: 'POST',
+    body: JSON.stringify(response),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+}
+```
+
+## HTTP Webhooks
+
+HTTP webhooks send JSON payloads to custom HTTP endpoints, allowing integration with any service.
+
+### Configuration
+
+```prisma
+model Zipline {
+  httpWebhookOnUpload  String?
+  httpWebhookOnShorten String?
+}
+```
+
+Set these to the URL of your HTTP endpoint.
+
+### Webhook Events
+
+#### File Upload Event
+
+When a file is uploaded, Zipline sends:
+
+```bash
+POST https://your-endpoint.com/webhook
+Content-Type: application/json
+x-zipline-webhook: true
+x-zipline-webhook-type: upload
+
+{
+  "type": "upload",
+  "data": {
+    "user": {
+      "id": "clx1234567890",
+      "username": "john",
+      "role": "USER",
+      "avatar": "https://example.com/avatar.png",
+      "createdAt": "2024-01-15T10:30:00.000Z"
+    },
+    "file": {
+      "id": "clx9876543210",
+      "name": "screenshot.png",
+      "originalName": "Screenshot 2024-01-20.png",
+      "size": 1048576,
+      "type": "image/png",
+      "createdAt": "2024-01-20T14:22:00.000Z",
+      "views": 0,
+      "favorite": false
+    },
+    "link": {
+      "raw": "https://i.example.com/abc123.png"
+    }
+  }
+}
+```
+
+#### URL Shorten Event
+
+When a URL is shortened:
+
+```bash
+POST https://your-endpoint.com/webhook
+Content-Type: application/json
+x-zipline-webhook: true
+x-zipline-webhook-type: shorten
+
+{
+  "type": "shorten",
+  "data": {
+    "user": {
+      "id": "clx1234567890",
+      "username": "john",
+      "role": "USER"
+    },
+    "url": {
+      "id": "clx5555555555",
+      "code": "abc123",
+      "destination": "https://example.com/very-long-url",
+      "views": 0,
+      "createdAt": "2024-01-20T15:00:00.000Z"
+    },
+    "link": {
+      "raw": "https://example.com/go/abc123"
+    }
+  }
+}
+```
+
+### Security Considerations
+
+<Warning>
+Sensitive fields are automatically removed from webhook payloads:
+- User passwords
+- User tokens
+- TOTP secrets
+- OAuth provider data
+- Passkey data
+- File passwords
+</Warning>
+
+The implementation at `src/lib/webhooks/http.ts:7` sanitizes data:
+
+```typescript
+delete user.oauthProviders;
+delete user.passkeys;
+delete user.token;
+delete user.password;
+delete user.totpSecret;
+delete file.password;
+```
+
+### Custom Headers
+
+All HTTP webhooks include these headers:
+
+- `Content-Type: application/json`
+- `x-zipline-webhook: true`
+- `x-zipline-webhook-type: upload` or `shorten`
+
+You can use these headers to validate that requests come from Zipline.
+
+## Example Integrations
+
+### Slack Integration
+
+Convert the webhook payload for Slack:
+
+```javascript
+// Your webhook endpoint
+app.post('/zipline-webhook', (req, res) => {
+  const { type, data } = req.body;
+  
+  if (type === 'upload') {
+    const message = {
+      text: `${data.user.username} uploaded ${data.file.name}`,
+      attachments: [{
+        title: data.file.originalName,
+        title_link: data.link.raw,
+        color: '#5865F2'
+      }]
+    };
+    
+    // Forward to Slack webhook
+    fetch(SLACK_WEBHOOK_URL, {
+      method: 'POST',
+      body: JSON.stringify(message)
+    });
+  }
+  
+  res.sendStatus(200);
+});
+```
+
+### Database Logging
+
+Log all uploads to your database:
+
+```javascript
+app.post('/zipline-webhook', async (req, res) => {
+  const { type, data } = req.body;
+  
+  if (type === 'upload') {
+    await db.uploadLogs.create({
+      userId: data.user.id,
+      fileName: data.file.name,
+      fileSize: data.file.size,
+      fileType: data.file.type,
+      url: data.link.raw,
+      timestamp: new Date()
+    });
+  }
+  
+  res.sendStatus(200);
+});
+```
+
+## Troubleshooting
+
+### Webhooks Not Firing
+
+1. Check that the webhook URL is configured correctly
+2. Verify the feature is enabled in your database
+3. Check server logs for error messages
+4. Test the webhook URL manually with curl
+
+### Discord Embed Not Showing
+
+- Ensure the embed JSON is valid
+- Check that color values are valid hex strings
+- Verify template variables are spelled correctly
+- Make sure the webhook URL has permission to post embeds
+
+### HTTP Webhook Failures
+
+- Verify your endpoint is publicly accessible
+- Check that your endpoint returns a 2xx status code
+- Look for timeout issues (webhooks have a timeout)
+- Ensure your endpoint accepts `application/json`

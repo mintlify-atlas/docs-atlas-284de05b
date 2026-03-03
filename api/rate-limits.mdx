@@ -1,0 +1,325 @@
+---
+title: Rate Limits
+description: Understanding Zipline's rate limiting system and how to handle rate limit errors
+---
+
+Zipline implements rate limiting to protect the server from abuse and ensure fair usage across all users. Rate limits are configurable and can be customized per instance.
+
+## Default Rate Limits
+
+By default, Zipline enforces rate limits on most API endpoints. The exact limits depend on your instance configuration.
+
+### Global Rate Limit Configuration
+
+From the source code (src/server/index.ts:139-172), the rate limit plugin is configured as follows:
+
+```typescript
+await server.register(fastifyRateLimit, {
+  global: false,
+  hook: 'preHandler',
+  max: config.ratelimit.max,              // Default: 10 requests
+  timeWindow: config.ratelimit.window,     // Default: 1 minute
+  keyGenerator: (req) => {
+    return `${req.user?.id ?? req.ip}-${req.url}-${req.method}`;
+  },
+  allowList: async (req, key) => {
+    if (config.ratelimit.adminBypass && isAdministrator(req.user?.role)) return true;
+    if (config.ratelimit.allowList.includes(key)) return true;
+    if (Object.keys(req.headers).includes('x-zipline-p-filename')) return true;
+    return false;
+  }
+});
+```
+
+**Default Settings:**
+- **Max Requests**: 10 per time window
+- **Time Window**: Configurable (typically 60 seconds)
+- **Key**: Based on user ID or IP + endpoint + method
+- **Admin Bypass**: Administrators can bypass rate limits if enabled
+
+## Rate Limit Key Generation
+
+Rate limits are tracked per unique key, which is generated based on:
+
+```
+{user_id or ip_address}-{endpoint}-{http_method}
+```
+
+**Examples:**
+- `clx1y2z3a0000-/api/upload-POST` (authenticated user)
+- `192.168.1.100-/api/upload-POST` (unauthenticated request)
+
+This means:
+- Each endpoint has its own rate limit counter
+- GET and POST to the same endpoint count separately
+- Rate limits are per-user when authenticated
+- Rate limits are per-IP when unauthenticated
+
+## Endpoint-Specific Rate Limits
+
+Some sensitive endpoints have stricter rate limits configured using `secondlyRatelimit()`:
+
+### Login Endpoint
+
+From src/server/routes/api/auth/login.ts:36:
+
+```typescript
+...secondlyRatelimit(2)  // 1 request per 2 seconds
+```
+
+**Applied to:**
+- `POST /api/auth/login` - 1 request per 2 seconds
+
+### User Profile Updates
+
+From src/server/routes/api/user/index.ts:52:
+
+```typescript
+...secondlyRatelimit(1)  // 1 request per 1 second
+```
+
+**Applied to:**
+- `PATCH /api/user` - 1 request per 1 second
+
+### Rate Limit Helper
+
+From src/lib/ratelimits.ts:
+
+```typescript
+export const secondlyRatelimit = (seconds: number) => ({
+  config: { 
+    rateLimit: { 
+      max: 1, 
+      timeWindow: `${seconds} seconds`, 
+      allowList: [] 
+    } 
+  },
+});
+```
+
+## Admin Bypass
+
+Administrators can be configured to bypass rate limits:
+
+```typescript
+if (config.ratelimit.adminBypass && isAdministrator(req.user?.role)) {
+  return true; // Skip rate limiting
+}
+```
+
+**Roles that can bypass:**
+- `ADMIN`
+- `SUPERADMIN`
+
+**Configuration:**
+Set `ZIPLINE_RATELIMIT_ADMIN_BYPASS=true` to enable this feature.
+
+## Allow List
+
+Specific keys can be added to an allow list to bypass rate limits:
+
+```typescript
+if (config.ratelimit.allowList.includes(key)) {
+  return true;
+}
+```
+
+From the Prisma schema (prisma/schema.prisma:117-121):
+
+```prisma
+ratelimitEnabled     Boolean  @default(true)
+ratelimitMax         Int      @default(10)
+ratelimitWindow      Int?
+ratelimitAdminBypass Boolean  @default(true)
+ratelimitAllowList   String[]
+```
+
+## Partial Upload Exemption
+
+Chunked file uploads (partial uploads) bypass standard rate limits when the `x-zipline-p-filename` header is present:
+
+```typescript
+if (Object.keys(req.headers).includes('x-zipline-p-filename')) {
+  return true; // Chunked upload - skip rate limit
+}
+```
+
+This ensures large file uploads aren't interrupted by rate limits.
+
+## Rate Limit Headers
+
+When a request is rate limited, Zipline uses the `@fastify/rate-limit` plugin which typically includes these headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed in the time window |
+| `X-RateLimit-Remaining` | Remaining requests in the current window |
+| `X-RateLimit-Reset` | Unix timestamp when the rate limit resets |
+| `Retry-After` | Seconds until you can retry (when limited) |
+
+## Rate Limit Response
+
+When you exceed the rate limit, you'll receive a 429 status code:
+
+```json
+{
+  "error": "Rate limit exceeded",
+  "statusCode": 429
+}
+```
+
+## Handling Rate Limits
+
+### Exponential Backoff
+
+Implement exponential backoff in your client code:
+
+```javascript
+async function uploadWithRetry(file, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const response = await fetch('https://your-zipline.com/api/upload', {
+        method: 'POST',
+        headers: { 'Authorization': 'YOUR_TOKEN' },
+        body: formData
+      });
+
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, i) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+    }
+  }
+}
+```
+
+### Respect Retry-After Header
+
+Always check and respect the `Retry-After` header:
+
+```python
+import time
+import requests
+
+def upload_file(file_path, token):
+    url = 'https://your-zipline.com/api/upload'
+    headers = {'Authorization': token}
+    files = {'file': open(file_path, 'rb')}
+    
+    response = requests.post(url, headers=headers, files=files)
+    
+    if response.status_code == 429:
+        retry_after = int(response.headers.get('Retry-After', 60))
+        print(f"Rate limited. Waiting {retry_after} seconds...")
+        time.sleep(retry_after)
+        return upload_file(file_path, token)  # Retry
+    
+    return response.json()
+```
+
+## Configuration Options
+
+Configure rate limiting via environment variables:
+
+```bash
+# Enable/disable rate limiting
+ZIPLINE_RATELIMIT_ENABLED=true
+
+# Maximum requests per time window
+ZIPLINE_RATELIMIT_MAX=10
+
+# Time window in milliseconds (default: 60000 = 1 minute)
+ZIPLINE_RATELIMIT_WINDOW=60000
+
+# Allow admins to bypass rate limits
+ZIPLINE_RATELIMIT_ADMIN_BYPASS=true
+
+# Comma-separated list of IPs to allow
+ZIPLINE_RATELIMIT_ALLOW_LIST=192.168.1.100,10.0.0.1
+```
+
+Or configure in the database (Zipline settings):
+
+<CodeGroup>
+```json Database Configuration
+{
+  "ratelimitEnabled": true,
+  "ratelimitMax": 10,
+  "ratelimitWindow": 60000,
+  "ratelimitAdminBypass": true,
+  "ratelimitAllowList": ["192.168.1.100"]
+}
+```
+</CodeGroup>
+
+## Monitoring Rate Limits
+
+When rate limits are exceeded, Zipline logs warnings:
+
+```
+[ratelimit] warn: rate limit exceeded for user username (key: user-id-/api/upload-POST)
+```
+
+Monitor your logs to identify:
+- Users hitting rate limits frequently
+- Potential abuse or bot activity
+- Endpoints that may need higher limits
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Batch operations when possible">
+    Instead of uploading files one by one, use multi-file upload to reduce the number of API calls.
+    
+    ```bash
+    # Instead of multiple requests
+    curl -F "file=@file1.png" ...
+    curl -F "file=@file2.png" ...
+    
+    # Use one request
+    curl -F "file=@file1.png" -F "file=@file2.png" ...
+    ```
+  </Accordion>
+
+  <Accordion title="Cache responses when appropriate">
+    For data that doesn't change frequently (like user stats), cache the response on your client side.
+  </Accordion>
+
+  <Accordion title="Use appropriate retry logic">
+    Always implement exponential backoff and respect the Retry-After header. Never retry immediately in a tight loop.
+  </Accordion>
+
+  <Accordion title="Monitor your usage">
+    Keep track of your API usage patterns and adjust your application logic to stay within limits.
+  </Accordion>
+
+  <Accordion title="Contact your instance admin">
+    If you consistently hit rate limits during legitimate use, contact your Zipline instance administrator to discuss increasing limits.
+  </Accordion>
+</AccordionGroup>
+
+## Exempt Endpoints
+
+Some endpoints may not have rate limiting applied:
+
+- Health check: `/api/healthcheck`
+- Version info: `/api/version`
+- Static file serving
+- Public file access (viewing/downloading)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/api/errors">
+    Learn how to handle all API errors
+  </Card>
+  <Card title="Upload Files" icon="cloud-arrow-up" href="/api/endpoints/upload">
+    Start uploading files
+  </Card>
+</CardGroup>

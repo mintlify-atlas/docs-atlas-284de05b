@@ -1,0 +1,127 @@
+---
+title: User Statistics
+description: View comprehensive statistics about your uploads, storage, and activity
+---
+
+## Get Statistics
+
+<Card title="GET /api/user/stats" icon="chart-simple">
+  Retrieve detailed statistics about your files, storage usage, URLs, and activity.
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user/stats \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Response
+
+<ResponseField name="filesUploaded" type="number">
+  Total number of files uploaded by this user
+</ResponseField>
+
+<ResponseField name="favoriteFiles" type="number">
+  Number of files marked as favorite
+</ResponseField>
+
+<ResponseField name="views" type="number">
+  Total views across all files
+</ResponseField>
+
+<ResponseField name="avgViews" type="number">
+  Average views per file
+</ResponseField>
+
+<ResponseField name="storageUsed" type="number">
+  Total storage used in bytes
+</ResponseField>
+
+<ResponseField name="avgStorageUsed" type="number">
+  Average file size in bytes
+</ResponseField>
+
+<ResponseField name="urlsCreated" type="number">
+  Total number of shortened URLs created
+</ResponseField>
+
+<ResponseField name="urlViews" type="number">
+  Total views across all shortened URLs
+</ResponseField>
+
+<ResponseField name="sortTypeCount" type="object">
+  Breakdown of files by MIME type
+  
+  Each key is a MIME type (e.g., `image/png`, `video/mp4`) and the value is the count of files with that type.
+</ResponseField>
+
+```json Example Response
+{
+  "filesUploaded": 147,
+  "favoriteFiles": 12,
+  "views": 3842,
+  "avgViews": 26.13,
+  "storageUsed": 5368709120,
+  "avgStorageUsed": 36520000,
+  "urlsCreated": 23,
+  "urlViews": 891,
+  "sortTypeCount": {
+    "image/png": 89,
+    "image/jpeg": 34,
+    "video/mp4": 12,
+    "application/pdf": 8,
+    "text/plain": 4
+  }
+}
+```
+
+## Statistics Breakdown
+
+### File Statistics
+
+- **filesUploaded**: Every file you've uploaded (including deleted files with max views)
+- **favoriteFiles**: Files marked with the favorite flag
+- **views**: Sum of all view counts across files
+- **avgViews**: Mean views per file (views ÷ filesUploaded)
+
+### Storage Statistics
+
+- **storageUsed**: Total bytes used by all your files
+- **avgStorageUsed**: Average file size (storageUsed ÷ filesUploaded)
+
+<Tip>
+  To convert `storageUsed` to human-readable format:
+  - **GB**: `storageUsed / 1024 / 1024 / 1024`
+  - **MB**: `storageUsed / 1024 / 1024`
+  
+  Example: `5368709120` bytes = ~5 GB
+</Tip>
+
+### URL Statistics
+
+- **urlsCreated**: Total shortened URLs created
+- **urlViews**: Sum of all URL visit counts
+
+### File Type Distribution
+
+`sortTypeCount` provides a breakdown by MIME type, useful for:
+- Understanding what types of content you upload most
+- Displaying visual charts/graphs
+- Analyzing storage usage by file type
+
+```javascript Example: Get Top 5 File Types
+const topTypes = Object.entries(stats.sortTypeCount)
+  .sort(([, a], [, b]) => b - a)
+  .slice(0, 5)
+  .map(([type, count]) => ({ type, count }));
+
+// Result:
+// [
+//   { type: 'image/png', count: 89 },
+//   { type: 'image/jpeg', count: 34 },
+//   { type: 'video/mp4', count: 12 },
+//   { type: 'application/pdf', count: 8 },
+//   { type: 'text/plain', count: 4 }
+// ]
+```

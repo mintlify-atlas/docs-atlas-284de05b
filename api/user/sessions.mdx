@@ -1,0 +1,179 @@
+---
+title: Sessions
+description: Manage active login sessions across devices and browsers
+---
+
+## Get Sessions
+
+<Card title="GET /api/user/sessions" icon="users">
+  Retrieve all active login sessions for your account.
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user/sessions \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Cookie: zipline_token=YOUR_SESSION_TOKEN"
+```
+
+### Response
+
+<ResponseField name="current" type="object">
+  The current session making this request
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Unique session identifier
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when session was created
+    </ResponseField>
+    
+    <ResponseField name="ua" type="string">
+      Full user agent string
+    </ResponseField>
+    
+    <ResponseField name="client" type="string">
+      Parsed client name (e.g., "Chrome", "Firefox")
+    </ResponseField>
+    
+    <ResponseField name="device" type="string">
+      Device type (e.g., "Desktop", "Mobile")
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="other" type="array">
+  Array of other active sessions (excluding the current one)
+  
+  <Expandable title="session object">
+    <ResponseField name="id" type="string">
+      Session ID
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Session creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="ua" type="string">
+      User agent
+    </ResponseField>
+    
+    <ResponseField name="client" type="string">
+      Client name
+    </ResponseField>
+    
+    <ResponseField name="device" type="string">
+      Device type
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json Example Response
+{
+  "current": {
+    "id": "sess_abc123",
+    "createdAt": "2024-03-15T10:30:00.000Z",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0",
+    "client": "Chrome",
+    "device": "Desktop"
+  },
+  "other": [
+    {
+      "id": "sess_def456",
+      "createdAt": "2024-03-14T08:15:00.000Z",
+      "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1",
+      "client": "Mobile Safari",
+      "device": "Mobile"
+    }
+  ]
+}
+```
+
+---
+
+## Delete Session
+
+<Card title="DELETE /api/user/sessions" icon="trash">
+  Log out of a specific session or all other sessions. You cannot delete your current session - use the logout endpoint instead.
+</Card>
+
+### Request
+
+<ParamField body="sessionId" type="string" optional>
+  ID of the session to delete. Must be a session ID from the `other` array, not your current session.
+</ParamField>
+
+<ParamField body="all" type="boolean" optional>
+  Set to `true` to delete all other sessions (except the current one).
+</ParamField>
+
+<Note>
+  You must provide either `sessionId` or `all: true`, but not both.
+</Note>
+
+### Delete a Specific Session
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/sessions \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "sess_def456"
+  }'
+```
+
+### Delete All Other Sessions
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/sessions \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "all": true
+  }'
+```
+
+### Response
+
+Returns the updated session list in the same format as GET `/api/user/sessions`.
+
+```json Example Response
+{
+  "current": {
+    "id": "sess_abc123",
+    "createdAt": "2024-03-15T10:30:00.000Z",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0",
+    "client": "Chrome",
+    "device": "Desktop"
+  },
+  "other": []
+}
+```
+
+### Errors
+
+- **400 Bad Request**: Attempted to delete current session or session not found
+- **401 Unauthorized**: Invalid login session
+
+```json Error Examples
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Cannot delete current session, use log out instead."
+}
+```
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Session not found in logged in sessions"
+}
+```
+
+<Warning>
+  Deleting sessions will immediately log out those devices. Users will need to log in again on those devices.
+</Warning>

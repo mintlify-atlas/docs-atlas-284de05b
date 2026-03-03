@@ -1,0 +1,398 @@
+---
+title: Reverse Proxy Setup
+description: Configure a reverse proxy (Nginx, Caddy, Apache) for Zipline
+---
+
+Running Zipline behind a reverse proxy enables SSL/TLS termination, load balancing, and better security. This guide covers popular reverse proxy configurations.
+
+## Before You Begin
+
+<Steps>
+  <Step title="Enable trust proxy mode">
+    Configure Zipline to trust proxy headers by setting:
+
+    ```bash
+    CORE_TRUST_PROXY=true
+    ```
+
+    This allows Zipline to correctly identify client IP addresses from `X-Forwarded-For` headers.
+
+    <Warning>
+      Only enable `CORE_TRUST_PROXY` if Zipline is behind a reverse proxy. Enabling this in a direct-to-internet setup could allow IP spoofing.
+    </Warning>
+  </Step>
+
+  <Step title="Configure bind address">
+    By default, Zipline binds to `0.0.0.0:3000`. When behind a reverse proxy, you can restrict it to localhost:
+
+    ```bash
+    CORE_HOSTNAME=127.0.0.1
+    CORE_PORT=3000
+    ```
+
+    <Tip>
+      Binding to `127.0.0.1` prevents direct external access to Zipline, forcing all traffic through your reverse proxy.
+    </Tip>
+  </Step>
+
+  <Step title="Update Docker port mapping (if applicable)">
+    If using Docker, update your `docker-compose.yml` to only expose the port locally:
+
+    ```yaml
+    services:
+      zipline:
+        ports:
+          - '127.0.0.1:3000:3000'  # Only accessible from localhost
+    ```
+  </Step>
+</Steps>
+
+## Nginx Configuration
+
+<Steps>
+  <Step title="Create Nginx configuration file">
+    Create a new configuration file at `/etc/nginx/sites-available/zipline`:
+
+    ```nginx
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name your-domain.com;
+
+        # Redirect HTTP to HTTPS
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name your-domain.com;
+
+        # SSL configuration (paths will vary)
+        ssl_certificate /etc/ssl/certs/your-domain.crt;
+        ssl_certificate_key /etc/ssl/private/your-domain.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        # Client max body size (adjust based on your needs)
+        client_max_body_size 100M;
+
+        # Proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Proxy timeouts for large uploads
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+
+        location / {
+            proxy_pass http://localhost:3000;
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Enable the site">
+    Create a symbolic link to enable the site:
+
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/zipline /etc/nginx/sites-enabled/
+    ```
+  </Step>
+
+  <Step title="Test and reload Nginx">
+    Test the configuration and reload Nginx:
+
+    ```bash
+    sudo nginx -t
+    sudo systemctl reload nginx
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The `client_max_body_size` directive should match or exceed your `FILES_MAX_FILE_SIZE` configuration in Zipline.
+</Note>
+
+## Caddy Configuration
+
+Caddy automatically handles SSL certificates via Let's Encrypt, making it the simplest option.
+
+<Steps>
+  <Step title="Create Caddyfile">
+    Create or edit your `Caddyfile`:
+
+    ```caddy
+    your-domain.com {
+        reverse_proxy localhost:3000
+
+        # Optional: Increase timeout for large uploads
+        request_body {
+            max_size 100MB
+        }
+    }
+    ```
+
+    <Tip>
+      That's it! Caddy automatically obtains and renews SSL certificates from Let's Encrypt.
+    </Tip>
+  </Step>
+
+  <Step title="Reload Caddy">
+    Reload Caddy to apply changes:
+
+    ```bash
+    sudo systemctl reload caddy
+    ```
+  </Step>
+</Steps>
+
+## Apache Configuration
+
+<Steps>
+  <Step title="Enable required modules">
+    Enable the necessary Apache modules:
+
+    ```bash
+    sudo a2enmod proxy
+    sudo a2enmod proxy_http
+    sudo a2enmod ssl
+    sudo a2enmod headers
+    ```
+  </Step>
+
+  <Step title="Create virtual host configuration">
+    Create `/etc/apache2/sites-available/zipline.conf`:
+
+    ```apache
+    <VirtualHost *:80>
+        ServerName your-domain.com
+        Redirect permanent / https://your-domain.com/
+    </VirtualHost>
+
+    <VirtualHost *:443>
+        ServerName your-domain.com
+
+        SSLEngine on
+        SSLCertificateFile /etc/ssl/certs/your-domain.crt
+        SSLCertificateKeyFile /etc/ssl/private/your-domain.key
+
+        # Proxy settings
+        ProxyPreserveHost On
+        ProxyPass / http://localhost:3000/
+        ProxyPassReverse / http://localhost:3000/
+
+        # Forward headers
+        RequestHeader set X-Forwarded-Proto "https"
+        RequestHeader set X-Forwarded-Port "443"
+
+        # Increase timeout for large uploads
+        ProxyTimeout 300
+
+        # Error log
+        ErrorLog ${APACHE_LOG_DIR}/zipline_error.log
+        CustomLog ${APACHE_LOG_DIR}/zipline_access.log combined
+    </VirtualHost>
+    ```
+  </Step>
+
+  <Step title="Enable site and reload Apache">
+    ```bash
+    sudo a2ensite zipline
+    sudo systemctl reload apache2
+    ```
+  </Step>
+</Steps>
+
+## Traefik Configuration (Docker)
+
+Traefik is popular for Docker deployments with automatic service discovery.
+
+```yaml
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+
+  zipline:
+    image: ghcr.io/diced/zipline
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zipline.rule=Host(`your-domain.com`)"
+      - "traefik.http.routers.zipline.entrypoints=websecure"
+      - "traefik.http.routers.zipline.tls.certresolver=myresolver"
+      - "traefik.http.services.zipline.loadbalancer.server.port=3000"
+    environment:
+      - CORE_TRUST_PROXY=true
+```
+
+## Cloudflare Tunnel (Cloudflared)
+
+Cloudflare Tunnel provides secure access without opening ports.
+
+<Steps>
+  <Step title="Install cloudflared">
+    Follow [Cloudflare's installation guide](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/)
+  </Step>
+
+  <Step title="Create a tunnel">
+    ```bash
+    cloudflared tunnel create zipline
+    ```
+  </Step>
+
+  <Step title="Configure tunnel">
+    Create `~/.cloudflared/config.yml`:
+
+    ```yaml
+    tunnel: <tunnel-id>
+    credentials-file: /root/.cloudflared/<tunnel-id>.json
+
+    ingress:
+      - hostname: your-domain.com
+        service: http://localhost:3000
+      - service: http_status:404
+    ```
+  </Step>
+
+  <Step title="Route traffic">
+    ```bash
+    cloudflared tunnel route dns zipline your-domain.com
+    ```
+  </Step>
+
+  <Step title="Run the tunnel">
+    ```bash
+    cloudflared tunnel run zipline
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  When using Cloudflare Tunnel, set `CORE_TRUST_PROXY=true` in Zipline's configuration.
+</Note>
+
+## Important Configuration
+
+### HTTPS URLs
+
+If you're using HTTPS with a reverse proxy, configure Zipline to return HTTPS URLs:
+
+```bash
+CORE_RETURN_HTTPS_URLS=true
+```
+
+This ensures that file URLs returned by the API use `https://` instead of `http://`.
+
+### Custom Domain
+
+Set your primary domain to ensure correct URL generation:
+
+```bash
+CORE_DEFAULT_DOMAIN=your-domain.com
+```
+
+### WebSocket Support (if needed in future)
+
+If Zipline adds WebSocket support, ensure your reverse proxy forwards WebSocket connections:
+
+**Nginx:**
+```nginx
+location / {
+    proxy_pass http://localhost:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+**Caddy:**
+```caddy
+reverse_proxy localhost:3000 {
+    transport http {
+        upgrade
+    }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="502 Bad Gateway error">
+    This usually means the reverse proxy cannot connect to Zipline:
+
+    - Verify Zipline is running: `docker compose ps` or `systemctl status zipline`
+    - Check the bind address and port in Zipline config
+    - Ensure firewall allows connections between proxy and Zipline
+    - Check proxy logs: `sudo tail -f /var/log/nginx/error.log`
+  </Accordion>
+
+  <Accordion title="Client IP shows as 127.0.0.1 or proxy IP">
+    This means Zipline isn't reading forwarded headers correctly:
+
+    - Ensure `CORE_TRUST_PROXY=true` is set
+    - Verify your reverse proxy is sending `X-Forwarded-For` headers
+    - Check that the header name matches (some proxies use different headers)
+  </Accordion>
+
+  <Accordion title="Large file uploads fail or timeout">
+    Increase timeout and size limits in both Zipline and the reverse proxy:
+
+    **Nginx:**
+    ```nginx
+    client_max_body_size 1G;
+    proxy_connect_timeout 600;
+    proxy_send_timeout 600;
+    proxy_read_timeout 600;
+    ```
+
+    **Caddy:**
+    ```caddy
+    request_body {
+        max_size 1GB
+    }
+    timeouts {
+        read 10m
+        write 10m
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="SSL/TLS certificate errors">
+    - Verify certificate paths in proxy configuration
+    - Check certificate validity: `openssl x509 -in cert.pem -text -noout`
+    - For Let's Encrypt, ensure ports 80 and 443 are accessible
+    - Check proxy error logs for specific SSL errors
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+- Always use HTTPS in production
+- Keep your reverse proxy software updated
+- Use strong SSL/TLS configurations (TLSv1.2+)
+- Implement rate limiting at the proxy level if needed
+- Consider using fail2ban to prevent brute force attacks
+- Restrict Zipline to localhost when behind a proxy
+- Enable security headers (HSTS, CSP, X-Frame-Options)
+
+<Tip>
+  For production deployments, consider using a CDN like Cloudflare or AWS CloudFront in front of your reverse proxy for additional performance and DDoS protection.
+</Tip>

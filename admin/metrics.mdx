@@ -1,0 +1,287 @@
+---
+title: Metrics & Analytics
+description: Monitor usage statistics and system metrics in Zipline
+---
+
+Zipline collects and stores metrics about your instance's usage, including file uploads, URL shortening, storage consumption, and user activity.
+
+## Enabling Metrics
+
+Metrics must be enabled in your configuration:
+
+```bash
+FEATURES_METRICS=true
+FEATURES_METRICS_ADMIN_ONLY=true
+FEATURES_METRICS_SHOW_USER_SPECIFIC=false
+```
+
+### Configuration Options
+
+- `FEATURES_METRICS` - Enable/disable metrics collection
+- `FEATURES_METRICS_ADMIN_ONLY` - Restrict metrics access to administrators only
+- `FEATURES_METRICS_SHOW_USER_SPECIFIC` - Show per-user statistics in metrics
+
+<Warning>
+If `FEATURES_METRICS_SHOW_USER_SPECIFIC` is disabled, user-specific data (filesUsers and urlsUsers) will be anonymized in API responses.
+</Warning>
+
+## Retrieving Metrics
+
+Fetch metrics data via the API:
+
+```bash
+curl "https://your-zipline.com/api/stats" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Query Parameters
+
+- `from` - Start date (ISO 8601 format)
+- `to` - End date (ISO 8601 format)
+- `all` - Retrieve all metrics regardless of date range
+
+### Date Range Examples
+
+Last 7 days (default):
+```bash
+curl "https://your-zipline.com/api/stats" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Custom date range:
+```bash
+curl "https://your-zipline.com/api/stats?from=2024-01-01&to=2024-01-31" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+All metrics:
+```bash
+curl "https://your-zipline.com/api/stats?all=true" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+## Metric Data Structure
+
+Each metric snapshot contains:
+
+```json
+{
+  "id": "metric_id",
+  "createdAt": "2024-03-03T12:00:00Z",
+  "data": {
+    "users": 25,
+    "files": 1543,
+    "fileViews": 8234,
+    "urls": 432,
+    "urlViews": 2341,
+    "storage": 10737418240,
+    "filesUsers": [
+      {
+        "username": "john_doe",
+        "sum": 156,
+        "storage": 5368709120,
+        "views": 4521
+      }
+    ],
+    "urlsUsers": [
+      {
+        "username": "john_doe",
+        "sum": 43,
+        "views": 1234
+      }
+    ],
+    "types": [
+      {
+        "type": "image/png",
+        "sum": 523
+      },
+      {
+        "type": "video/mp4",
+        "sum": 87
+      }
+    ]
+  }
+}
+```
+
+## Metric Fields
+
+### System-Wide Metrics
+
+- `users` - Total number of users
+- `files` - Total number of files uploaded
+- `fileViews` - Total file view count
+- `urls` - Total number of shortened URLs
+- `urlViews` - Total URL view count
+- `storage` - Total storage used in bytes
+
+### Per-User File Statistics
+
+`filesUsers` array contains:
+- `username` - Username (null if anonymized)
+- `sum` - Number of files uploaded
+- `storage` - Storage used in bytes
+- `views` - Total views on user's files
+
+### Per-User URL Statistics
+
+`urlsUsers` array contains:
+- `username` - Username (null if anonymized)
+- `sum` - Number of URLs created
+- `views` - Total views on user's URLs
+
+### File Type Distribution
+
+`types` array contains:
+- `type` - MIME type
+- `sum` - Number of files of this type
+
+## Access Control
+
+Metrics access is controlled by configuration and user role:
+
+<Steps>
+  <Step title="Metrics Enabled Check">
+    If `FEATURES_METRICS` is false, the endpoint returns 403 Forbidden
+  </Step>
+  
+  <Step title="Admin-Only Check">
+    If `FEATURES_METRICS_ADMIN_ONLY` is true, only administrators can access metrics
+  </Step>
+  
+  <Step title="User-Specific Data">
+    If `FEATURES_METRICS_SHOW_USER_SPECIFIC` is false, username arrays are anonymized
+  </Step>
+</Steps>
+
+## Date Validation
+
+When querying metrics with date ranges:
+
+- `from` date must be before `to` date
+- `from` date must be in the past
+- Invalid date formats return an error
+- Default range is the last 7 days
+
+<Note>
+Date validation is skipped when using `all=true` to retrieve all metrics.
+</Note>
+
+## Metric Collection
+
+Metrics are automatically collected at regular intervals and stored in the database. Each snapshot represents the state of your Zipline instance at that point in time.
+
+### Storage Format
+
+Metrics are stored with:
+- Unique ID
+- Creation timestamp
+- Update timestamp
+- JSON data object containing all statistics
+
+## Analyzing Metrics
+
+### Track Growth Over Time
+
+Query metrics across different time periods to analyze trends:
+
+```bash
+# Last month
+curl "https://your-zipline.com/api/stats?from=2024-02-01&to=2024-02-29" \
+  -H "Authorization: YOUR_TOKEN"
+
+# Last quarter
+curl "https://your-zipline.com/api/stats?from=2024-01-01&to=2024-03-31" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Identify Top Users
+
+When `FEATURES_METRICS_SHOW_USER_SPECIFIC` is enabled, use `filesUsers` and `urlsUsers` arrays to identify:
+
+- Highest storage consumers
+- Most active uploaders
+- Users with most views
+- Top URL creators
+
+### Monitor File Types
+
+Analyze the `types` array to understand:
+
+- Most common file types
+- Storage distribution by MIME type
+- Content patterns
+
+## Exporting Metrics
+
+Metrics are included in server exports by default. To export without metrics:
+
+```bash
+curl "https://your-zipline.com/api/server/export?nometrics=true" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+See the [Backups documentation](/admin/backups) for more information.
+
+## Metrics in Backups
+
+When creating backups:
+
+- All metric snapshots are included by default
+- Metrics count is reported in export metadata
+- Historical metrics are preserved during import
+
+### Export Counts
+
+Get a count of all data including metrics:
+
+```bash
+curl "https://your-zipline.com/api/server/export?counts=true" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Response:
+```json
+{
+  "users": 25,
+  "files": 1543,
+  "urls": 432,
+  "folders": 78,
+  "invites": 12,
+  "thumbnails": 891,
+  "metrics": 156
+}
+```
+
+## Privacy Considerations
+
+<Warning>
+**User Privacy:**
+
+When `FEATURES_METRICS_SHOW_USER_SPECIFIC` is enabled, metrics will expose per-user statistics. Consider privacy implications before enabling this feature, especially in multi-user environments.
+
+When disabled, the `filesUsers` and `urlsUsers` arrays will be empty in API responses, protecting individual user data.
+</Warning>
+
+## Performance Considerations
+
+- Metrics are ordered by creation date (descending)
+- Large date ranges may return significant data
+- Consider pagination or limiting queries for better performance
+- Metrics collection has minimal impact on upload/access performance
+
+## Troubleshooting
+
+### "metrics are disabled" Error
+
+Ensure `FEATURES_METRICS=true` in your configuration.
+
+### "admin only" Error
+
+Metrics are restricted to administrators. Either:
+- Log in as an administrator
+- Set `FEATURES_METRICS_ADMIN_ONLY=false` to allow all users access
+
+### Empty User Data
+
+If `filesUsers` and `urlsUsers` are empty, check that `FEATURES_METRICS_SHOW_USER_SPECIFIC=true`.

@@ -1,0 +1,139 @@
+---
+title: Introduction
+description: Get started with the Zipline API for file uploads, URL shortening, and resource management
+---
+
+The Zipline API provides programmatic access to all core functionality of your Zipline instance, including file uploads, URL shortening, and user management.
+
+## Base URL
+
+All API requests should be made to your Zipline instance URL:
+
+```
+https://your-zipline-instance.com/api
+```
+
+## API Endpoints Overview
+
+The Zipline API is organized into several main categories:
+
+### Authentication
+- **POST** `/api/auth/login` - Authenticate with username and password
+- **POST** `/api/auth/register` - Create a new user account
+- **POST** `/api/auth/logout` - End the current session
+- **GET** `/api/auth/oauth/*` - OAuth provider integrations (Discord, GitHub, Google, OIDC)
+
+### File Management
+- **POST** `/api/upload` - Upload one or more files
+- **POST** `/api/upload/partial` - Upload file chunks for large files
+- **GET** `/api/user/files` - List user's files with pagination and search
+- **GET** `/api/user/files/:id` - Get file details
+- **PATCH** `/api/user/files/:id` - Update file metadata
+- **DELETE** `/api/user/files/:id` - Delete a file
+
+### URL Shortening
+- **POST** `/api/user/urls` - Create a shortened URL
+- **GET** `/api/user/urls` - List user's shortened URLs
+- **GET** `/api/user/urls/:id` - Get URL details
+- **PATCH** `/api/user/urls/:id` - Update URL settings
+- **DELETE** `/api/user/urls/:id` - Delete a shortened URL
+
+### User Management
+- **GET** `/api/user` - Get current user information
+- **PATCH** `/api/user` - Update user profile
+- **GET** `/api/user/stats` - Get user statistics
+- **GET** `/api/user/recent` - Get recent uploads
+
+### Server Management (Admin)
+- **POST** `/api/server/export` - Export server data
+- **POST** `/api/server/import/v3` - Import from Zipline v3
+- **POST** `/api/server/import/v4` - Import from Zipline v4
+- **DELETE** `/api/server/clear_temp` - Clear temporary files
+- **DELETE** `/api/server/clear_zeros` - Clear zero-byte files
+
+### Health & Monitoring
+- **GET** `/api/healthcheck` - Check API and database health
+- **GET** `/api/stats` - Get server statistics
+- **GET** `/api/version` - Get Zipline version information
+
+## Example Request
+
+Here's a simple example of uploading a file using curl:
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/upload \
+  -H "Authorization: YOUR_API_TOKEN" \
+  -F "file=@/path/to/image.png"
+```
+
+## Response Format
+
+All API responses are in JSON format (unless specified otherwise with headers). Successful responses include the requested data:
+
+```json
+{
+  "files": [
+    {
+      "id": "clx1y2z3a0000...",
+      "name": "abc123.png",
+      "type": "image/png",
+      "url": "https://your-zipline-instance.com/u/abc123.png"
+    }
+  ]
+}
+```
+
+Error responses follow this format:
+
+```json
+{
+  "error": "Error message describing what went wrong",
+  "statusCode": 400
+}
+```
+
+## Client Libraries
+
+Zipline is compatible with ShareX and other file upload clients. You can also use standard HTTP clients in any programming language:
+
+- **Node.js**: axios, node-fetch, got
+- **Python**: requests, httpx, aiohttp  
+- **Go**: net/http, resty
+- **PHP**: Guzzle, cURL
+
+## ShareX Configuration
+
+Zipline works seamlessly with ShareX. Configure your custom uploader with:
+
+```json
+{
+  "Version": "14.0.0",
+  "Name": "Zipline",
+  "DestinationType": "ImageUploader, FileUploader",
+  "RequestMethod": "POST",
+  "RequestURL": "https://your-zipline-instance.com/api/upload",
+  "Headers": {
+    "Authorization": "YOUR_API_TOKEN"
+  },
+  "Body": "MultipartFormData",
+  "FileFormName": "file",
+  "URL": "$json:files[0].url$"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn how to authenticate API requests
+  </Card>
+  <Card title="Rate Limits" icon="gauge-high" href="/api/rate-limits">
+    Understand API rate limiting
+  </Card>
+  <Card title="Error Codes" icon="triangle-exclamation" href="/api/errors">
+    Handle API errors properly
+  </Card>
+  <Card title="Upload Files" icon="cloud-arrow-up" href="/api/endpoints/upload">
+    Start uploading files
+  </Card>
+</CardGroup>

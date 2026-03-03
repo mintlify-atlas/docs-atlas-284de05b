@@ -1,0 +1,242 @@
+---
+title: OAuth Authentication
+description: Enable social login with Discord, Google, GitHub, and OpenID Connect providers
+---
+
+Zipline supports OAuth authentication, allowing users to log in with their existing accounts from Discord, Google, GitHub, or any OpenID Connect (OIDC) compatible provider.
+
+## Supported Providers
+
+Zipline supports four OAuth providers:
+
+<CardGroup cols={2}>
+  <Card title="Discord" icon="discord">
+    Allow users to log in with their Discord account
+  </Card>
+  <Card title="Google" icon="google">
+    Allow users to log in with their Google account
+  </Card>
+  <Card title="GitHub" icon="github">
+    Allow users to log in with their GitHub account
+  </Card>
+  <Card title="OIDC" icon="key">
+    Connect to any OpenID Connect compatible provider
+  </Card>
+</CardGroup>
+
+## Configuration
+
+### Enabling OAuth
+
+OAuth must be enabled at the system level in your database configuration:
+
+```prisma
+// prisma/schema.prisma
+model Zipline {
+  featuresOauthRegistration Boolean @default(false)
+  oauthBypassLocalLogin     Boolean @default(false)
+  oauthLoginOnly            Boolean @default(false)
+}
+```
+
+- **featuresOauthRegistration**: Enable OAuth login/registration
+- **oauthBypassLocalLogin**: Skip the login page and go straight to OAuth
+- **oauthLoginOnly**: Disable local username/password authentication entirely
+
+### Discord Setup
+
+<Steps>
+  <Step title="Create Discord Application">
+    Visit the [Discord Developer Portal](https://discord.com/developers/applications) and create a new application.
+  </Step>
+  
+  <Step title="Configure OAuth2">
+    In your application settings, add a redirect URI:
+    ```
+    https://your-domain.com/api/auth/oauth/discord
+    ```
+  </Step>
+  
+  <Step title="Set Configuration">
+    Configure the following settings in your database:
+    ```prisma
+    oauthDiscordClientId     String?
+    oauthDiscordClientSecret String?
+    oauthDiscordRedirectUri  String?
+    oauthDiscordAllowedIds   String[] @default([])
+    oauthDiscordDeniedIds    String[] @default([])
+    ```
+  </Step>
+</Steps>
+
+<Note>
+You can restrict access by Discord user ID using `allowedIds` (whitelist) or `deniedIds` (blacklist).
+</Note>
+
+### Google Setup
+
+<Steps>
+  <Step title="Create Google Cloud Project">
+    Visit the [Google Cloud Console](https://console.cloud.google.com/) and create a new project.
+  </Step>
+  
+  <Step title="Enable OAuth2">
+    Navigate to "APIs & Services" > "Credentials" and create an OAuth 2.0 Client ID.
+  </Step>
+  
+  <Step title="Add Redirect URI">
+    ```
+    https://your-domain.com/api/auth/oauth/google
+    ```
+  </Step>
+  
+  <Step title="Set Configuration">
+    ```prisma
+    oauthGoogleClientId     String?
+    oauthGoogleClientSecret String?
+    oauthGoogleRedirectUri  String?
+    ```
+  </Step>
+</Steps>
+
+### GitHub Setup
+
+<Steps>
+  <Step title="Create GitHub OAuth App">
+    Go to GitHub Settings > Developer settings > [OAuth Apps](https://github.com/settings/developers) and create a new OAuth App.
+  </Step>
+  
+  <Step title="Set Callback URL">
+    ```
+    https://your-domain.com/api/auth/oauth/github
+    ```
+  </Step>
+  
+  <Step title="Set Configuration">
+    ```prisma
+    oauthGithubClientId     String?
+    oauthGithubClientSecret String?
+    oauthGithubRedirectUri  String?
+    ```
+  </Step>
+</Steps>
+
+### OpenID Connect (OIDC) Setup
+
+For custom OIDC providers like Keycloak, Authentik, or Authelia:
+
+<Steps>
+  <Step title="Get OIDC Endpoints">
+    Find your provider's OIDC discovery endpoint, typically at:
+    ```
+    https://your-provider.com/.well-known/openid-configuration
+    ```
+  </Step>
+  
+  <Step title="Extract URLs">
+    You'll need:
+    - Authorization endpoint
+    - Token endpoint
+    - Userinfo endpoint
+  </Step>
+  
+  <Step title="Set Configuration">
+    ```prisma
+    oauthOidcClientId     String?
+    oauthOidcClientSecret String?
+    oauthOidcAuthorizeUrl String?
+    oauthOidcTokenUrl     String?
+    oauthOidcUserinfoUrl  String?
+    oauthOidcRedirectUri  String?
+    ```
+  </Step>
+</Steps>
+
+## OAuth Flow
+
+The OAuth authentication flow in Zipline works as follows:
+
+1. User clicks "Sign in with [Provider]"
+2. User is redirected to the provider's authorization page
+3. After authorization, user is redirected back to Zipline with an authorization code
+4. Zipline exchanges the code for an access token
+5. Zipline fetches user information from the provider
+6. User is logged in or registered automatically
+
+## Implementation Reference
+
+The OAuth implementation can be found in:
+
+- **Discord**: `src/server/routes/api/auth/oauth/discord.ts:10`
+- **Google**: `src/server/routes/api/auth/oauth/google.ts:10`
+- **GitHub**: `src/server/routes/api/auth/oauth/github.ts:10`
+- **OIDC**: `src/server/routes/api/auth/oauth/oidc.ts:10`
+
+### Example: Discord Implementation
+
+```typescript
+// Fetch user data from Discord
+const userJson = await discordAuth.user(json.access_token);
+
+// Check allowed/denied lists
+if (deniedIds && deniedIds.length > 0 && deniedIds.includes(userJson.id)) {
+  return { error: 'You are not allowed to log in with Discord.' };
+}
+if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(userJson.id)) {
+  return { error: 'You are not allowed to log in with Discord.' };
+}
+
+// Fetch avatar
+const avatar = userJson.avatar
+  ? `https://cdn.discordapp.com/avatars/${userJson.id}/${userJson.avatar}.png`
+  : `https://cdn.discordapp.com/embed/avatars/${userJson.discriminator % 5}.png`;
+```
+
+## Account Linking
+
+Users can link multiple OAuth providers to their account. The OAuth provider data is stored in the database:
+
+```prisma
+model OAuthProvider {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  OAuthProviderType
+  
+  username     String
+  accessToken  String
+  refreshToken String?
+  oauthId      String?
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@unique([provider, oauthId])
+}
+
+enum OAuthProviderType {
+  DISCORD
+  GOOGLE
+  GITHUB
+  OIDC
+}
+```
+
+<Warning>
+Access tokens and refresh tokens are stored in the database. Ensure your database is properly secured.
+</Warning>
+
+## Troubleshooting
+
+### Redirect URI Mismatch
+
+Ensure the redirect URI in your OAuth provider settings exactly matches the one configured in Zipline. The URI should be:
+```
+https://your-domain.com/api/auth/oauth/[provider]
+```
+
+### OAuth Registration Disabled
+
+If you see "OAuth registration is disabled", ensure `featuresOauthRegistration` is set to `true` in your database.
+
+### Provider Not Configured
+
+If you see "[Provider] OAuth is not configured", ensure you've set the client ID and client secret for that provider.

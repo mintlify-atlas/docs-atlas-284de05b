@@ -1,0 +1,350 @@
+---
+title: Import & Export
+description: Backup and restore server data including users, files, and settings
+---
+
+<Warning>
+  **Authentication Required**: These endpoints require `ADMIN` role for export, `SUPERADMIN` role for import.
+</Warning>
+
+## Export Server Data
+
+<Card title="GET /api/server/export" icon="download">
+  Export all server data including users, files, URLs, settings, and metrics.
+</Card>
+
+### Request
+
+<ParamField query="nometrics" type="string" optional>
+  Exclude metrics from export (reduces file size significantly). Any value enables this option.
+</ParamField>
+
+<ParamField query="counts" type="string" optional>
+  Return only entity counts instead of full export. Set to `"true"` to enable.
+</ParamField>
+
+```bash Full export with metrics
+curl -X GET https://your-zipline.com/api/server/export \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -o zipline_export.json
+```
+
+```bash Export without metrics
+curl -X GET "https://your-zipline.com/api/server/export?nometrics=true" \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -o zipline_export.json
+```
+
+```bash Get export counts only
+curl -X GET "https://your-zipline.com/api/server/export?counts=true" \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+### Response (Counts Only)
+
+When `counts=true`:
+
+```json Example Response
+{
+  "users": 12,
+  "files": 1542,
+  "urls": 89,
+  "folders": 34,
+  "invites": 8,
+  "thumbnails": 1203,
+  "metrics": 1440
+}
+```
+
+### Response (Full Export)
+
+Returns a JSON file with the following structure:
+
+<ResponseField name="versions" type="object">
+  Version information
+  
+  <Expandable title="properties">
+    <ResponseField name="export" type="string">
+      Export format version (currently `"4"`)
+    </ResponseField>
+    
+    <ResponseField name="node" type="string">
+      Node.js version used to create export
+    </ResponseField>
+    
+    <ResponseField name="zipline" type="string">
+      Zipline version used to create export
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="request" type="object">
+  Export request metadata
+  
+  <Expandable title="properties">
+    <ResponseField name="date" type="string">
+      ISO 8601 timestamp when export was created
+    </ResponseField>
+    
+    <ResponseField name="env" type="object">
+      Environment variables (sanitized)
+    </ResponseField>
+    
+    <ResponseField name="user" type="string">
+      ID and username of admin who created export
+    </ResponseField>
+    
+    <ResponseField name="os" type="object">
+      Operating system information (arch, platform, cpus, hostname, release)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Exported data
+  
+  <Expandable title="properties">
+    <ResponseField name="settings" type="object">
+      Complete server settings (Zipline table)
+    </ResponseField>
+    
+    <ResponseField name="users" type="array">
+      All users (passwords hashed, tokens excluded)
+    </ResponseField>
+    
+    <ResponseField name="userPasskeys" type="array">
+      User passkey credentials
+    </ResponseField>
+    
+    <ResponseField name="userQuotas" type="array">
+      User quota configurations
+    </ResponseField>
+    
+    <ResponseField name="userOauthProviders" type="array">
+      OAuth provider connections
+    </ResponseField>
+    
+    <ResponseField name="userTags" type="array">
+      User-created tags with file associations
+    </ResponseField>
+    
+    <ResponseField name="invites" type="array">
+      Invite codes
+    </ResponseField>
+    
+    <ResponseField name="folders" type="array">
+      Folder structure with file references
+    </ResponseField>
+    
+    <ResponseField name="urls" type="array">
+      Shortened URLs
+    </ResponseField>
+    
+    <ResponseField name="files" type="array">
+      File metadata (does not include actual file data)
+    </ResponseField>
+    
+    <ResponseField name="thumbnails" type="array">
+      Thumbnail metadata
+    </ResponseField>
+    
+    <ResponseField name="metrics" type="array">
+      Metrics history (empty if `nometrics` parameter used)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Note>
+  The export includes **metadata only**. Actual file contents must be backed up separately from your datasource (S3 bucket, local storage, etc.).
+</Note>
+
+---
+
+## Import Server Data
+
+<Card title="POST /api/server/import/v4" icon="upload">
+  Import data from a Zipline v4 export file.
+</Card>
+
+<Warning>
+  **SUPERADMIN Only**: This endpoint requires `SUPERADMIN` role.
+</Warning>
+
+### Request
+
+<ParamField body="export4" type="object" required>
+  Complete Zipline v4 export object
+</ParamField>
+
+<ParamField body="config" type="object" optional>
+  Import configuration options
+  
+  <Expandable title="properties">
+    <ParamField body="settings" type="boolean" default="false">
+      Import server settings (currently unused, settings not imported)
+    </ParamField>
+    
+    <ParamField body="mergeCurrentUser" type="string | null" default="null">
+      User ID from export to merge with current user. Useful for importing your own data from another instance.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```bash Import full export
+curl -X POST https://your-zipline.com/api/server/import/v4 \
+  -H "Authorization: YOUR_SUPERADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @zipline_export.json
+```
+
+```bash Import and merge with current user
+curl -X POST https://your-zipline.com/api/server/import/v4 \
+  -H "Authorization: YOUR_SUPERADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "export4": { ... },
+    "config": {
+      "mergeCurrentUser": "clxxx123456789"
+    }
+  }'
+```
+
+### Response
+
+<ResponseField name="imported" type="object">
+  Count of successfully imported entities
+  
+  <Expandable title="properties">
+    <ResponseField name="users" type="number">
+      Number of users imported
+    </ResponseField>
+    
+    <ResponseField name="oauthProviders" type="number">
+      OAuth providers imported
+    </ResponseField>
+    
+    <ResponseField name="quotas" type="number">
+      User quotas imported
+    </ResponseField>
+    
+    <ResponseField name="passkeys" type="number">
+      Passkeys imported
+    </ResponseField>
+    
+    <ResponseField name="folders" type="number">
+      Folders imported
+    </ResponseField>
+    
+    <ResponseField name="files" type="number">
+      File metadata entries imported
+    </ResponseField>
+    
+    <ResponseField name="tags" type="number">
+      Tags imported
+    </ResponseField>
+    
+    <ResponseField name="urls" type="number">
+      Shortened URLs imported
+    </ResponseField>
+    
+    <ResponseField name="invites" type="number">
+      Invites imported
+    </ResponseField>
+    
+    <ResponseField name="metrics" type="number">
+      Metric entries imported
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json Example Response
+{
+  "imported": {
+    "users": 8,
+    "oauthProviders": 5,
+    "quotas": 3,
+    "passkeys": 12,
+    "folders": 28,
+    "files": 1204,
+    "tags": 45,
+    "urls": 67,
+    "invites": 4,
+    "metrics": 1440
+  }
+}
+```
+
+### Import Behavior
+
+#### Conflict Handling
+
+The import process skips entities that already exist:
+
+- **Users**: Skipped if username or ID already exists
+- **OAuth Providers**: Skipped if provider + oauthId combination exists
+- **Quotas**: Skipped if user already has a quota
+- **Passkeys**: Skipped if passkey name already exists for user
+- **Folders**: Skipped if folder name already exists for user
+- **Files**: Skipped if file name already exists
+- **Tags**: Skipped if tag name + user + createdAt combination exists
+- **URLs**: Skipped if code already exists for user
+- **Invites**: Skipped if invite code already exists for inviter
+
+#### User Merging
+
+When `mergeCurrentUser` is set:
+- Files, URLs, folders, and tags from the specified user ID are imported under your current user
+- User profile data (avatar, totpSecret, view settings) are merged
+- Useful for migrating your personal data between instances
+
+#### Data Relationships
+
+The import preserves relationships:
+- Folder parent-child hierarchies
+- File-folder associations
+- Tag-file associations
+- User ownership of all entities
+
+### Rate Limiting
+
+This endpoint is rate-limited to **1 request per 5 seconds** due to the intensive nature of imports.
+
+### Body Size Limit
+
+Import endpoint accepts up to **24GB** request body to support large exports.
+
+### Errors
+
+- **403 Forbidden**: Not a SUPERADMIN
+- **400 Bad Request**: Invalid export format
+- **429 Too Many Requests**: Rate limit exceeded
+
+<Warning>
+  **Import does not restore file contents.** You must separately restore actual files to your datasource. The import only restores metadata that tells Zipline about those files.
+</Warning>
+
+---
+
+## Backup Strategy
+
+<Tip>
+  For complete backups:
+  
+  1. **Export metadata**: Use `/api/server/export`
+  2. **Backup datasource**: Copy files from S3 bucket or local storage directory
+  3. **Backup database**: Export PostgreSQL database
+  4. **Store securely**: Keep exports in multiple locations
+  
+  To restore:
+  
+  1. **Restore database**: Import PostgreSQL backup or use fresh database
+  2. **Import metadata**: Use `/api/server/import/v4`
+  3. **Restore files**: Copy files back to datasource
+</Tip>
+
+## Export Format Versions
+
+- **v4**: Current format (Zipline v3+)
+- **v3**: Legacy format (deprecated)
+
+Always use v4 for new exports. The v3 import endpoint exists for migration from older Zipline versions.

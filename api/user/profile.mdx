@@ -1,0 +1,251 @@
+---
+title: User Profile
+description: Manage user profile information including username, password, avatar, and custom view settings
+---
+
+## Get User Profile
+
+<Card title="GET /api/user" icon="user">
+  Retrieve the authenticated user's profile information and session token.
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Cookie: zipline_token=YOUR_SESSION_TOKEN"
+```
+
+### Response
+
+<ResponseField name="user" type="object">
+  User profile object
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Unique user identifier (CUID)
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      User's username
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role: `USER`, `ADMIN`, or `SUPERADMIN`
+    </ResponseField>
+    
+    <ResponseField name="avatar" type="string | null">
+      Base64-encoded avatar image or URL
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of account creation
+    </ResponseField>
+    
+    <ResponseField name="view" type="object">
+      Custom embed/view configuration for uploaded files
+      
+      <Expandable title="properties">
+        <ResponseField name="enabled" type="boolean">
+          Whether custom view is enabled
+        </ResponseField>
+        
+        <ResponseField name="content" type="string | null">
+          Custom content for file pages
+        </ResponseField>
+        
+        <ResponseField name="embed" type="boolean">
+          Enable embed tags
+        </ResponseField>
+        
+        <ResponseField name="embedTitle" type="string | null">
+          Custom embed title
+        </ResponseField>
+        
+        <ResponseField name="embedDescription" type="string | null">
+          Custom embed description
+        </ResponseField>
+        
+        <ResponseField name="embedColor" type="string | null">
+          Embed color (hex format)
+        </ResponseField>
+        
+        <ResponseField name="embedSiteName" type="string | null">
+          Custom site name for embeds
+        </ResponseField>
+        
+        <ResponseField name="align" type="string">
+          Content alignment: `left`, `center`, or `right`
+        </ResponseField>
+        
+        <ResponseField name="showMimetype" type="boolean">
+          Display file mimetype on file pages
+        </ResponseField>
+        
+        <ResponseField name="showTags" type="boolean">
+          Display tags on file pages
+        </ResponseField>
+        
+        <ResponseField name="showFolder" type="boolean">
+          Display folder information on file pages
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="quota" type="object | null">
+      User quota information (if configured)
+      
+      <Expandable title="properties">
+        <ResponseField name="filesQuota" type="string">
+          Quota type: `BY_BYTES` or `BY_FILES`
+        </ResponseField>
+        
+        <ResponseField name="maxBytes" type="string | null">
+          Maximum storage in bytes (e.g., "10gb")
+        </ResponseField>
+        
+        <ResponseField name="maxFiles" type="number | null">
+          Maximum number of files allowed
+        </ResponseField>
+        
+        <ResponseField name="maxUrls" type="number | null">
+          Maximum number of shortened URLs allowed
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Current session token cookie value
+</ResponseField>
+
+```json Example Response
+{
+  "user": {
+    "id": "clxxx123456789",
+    "username": "john_doe",
+    "role": "USER",
+    "avatar": null,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "view": {
+      "enabled": true,
+      "content": null,
+      "embed": true,
+      "embedTitle": "My Files",
+      "embedDescription": null,
+      "embedColor": "#3b82f6",
+      "embedSiteName": "John's Zipline",
+      "align": "center",
+      "showMimetype": true,
+      "showTags": true,
+      "showFolder": false
+    },
+    "quota": null
+  },
+  "token": "ey..."
+}
+```
+
+---
+
+## Update User Profile
+
+<Card title="PATCH /api/user" icon="pen">
+  Update user profile settings. All fields are optional - only provided fields will be updated.
+</Card>
+
+### Request
+
+<ParamField body="username" type="string" optional>
+  New username (must be unique)
+</ParamField>
+
+<ParamField body="password" type="string" optional>
+  New password (will be hashed before storage)
+</ParamField>
+
+<ParamField body="avatar" type="string | null" optional>
+  Base64-encoded image data or URL. Set to `null` to remove avatar.
+</ParamField>
+
+<ParamField body="view" type="object" optional>
+  Custom view/embed configuration
+  
+  <Expandable title="properties">
+    <ParamField body="enabled" type="boolean" optional>
+      Enable custom view settings
+    </ParamField>
+    
+    <ParamField body="content" type="string | null" optional>
+      Custom content for file pages
+    </ParamField>
+    
+    <ParamField body="embed" type="boolean" optional>
+      Enable embed meta tags
+    </ParamField>
+    
+    <ParamField body="embedTitle" type="string | null" optional>
+      Custom embed title
+    </ParamField>
+    
+    <ParamField body="embedDescription" type="string | null" optional>
+      Custom embed description
+    </ParamField>
+    
+    <ParamField body="embedColor" type="string | null" optional>
+      Embed theme color (hex format)
+    </ParamField>
+    
+    <ParamField body="embedSiteName" type="string | null" optional>
+      Site name for embeds
+    </ParamField>
+    
+    <ParamField body="align" type="string" optional>
+      Content alignment: `left`, `center`, or `right`
+    </ParamField>
+    
+    <ParamField body="showMimetype" type="boolean" optional>
+      Show file mimetype
+    </ParamField>
+    
+    <ParamField body="showTags" type="boolean" optional>
+      Show tags
+    </ParamField>
+    
+    <ParamField body="showFolder" type="boolean" optional>
+      Show folder information
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "new_username",
+    "view": {
+      "embedColor": "#10b981",
+      "showTags": true
+    }
+  }'
+```
+
+### Response
+
+Returns the updated user object and session token in the same format as GET `/api/user`.
+
+### Errors
+
+- **400 Bad Request**: Username already exists
+- **429 Too Many Requests**: Rate limit exceeded (1 request per second)
+
+```json Error Response
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Username already exists"
+}
+```

@@ -1,0 +1,204 @@
+---
+title: 'Delete Folder'
+description: 'Delete a folder or remove files from a folder'
+---
+
+Delete a folder or remove individual files from it. When deleting a folder, you can choose what happens to its children and files.
+
+## Endpoint
+
+```http
+DELETE /api/user/folders/:id
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The ID of the folder to delete or modify
+</ParamField>
+
+## Request Body
+
+<ParamField body="delete" type="string" required>
+  Type of deletion: `folder` to delete the folder itself, or `file` to remove a file from the folder.
+</ParamField>
+
+### When deleting a folder (`delete: "folder"`)
+
+<ParamField body="childrenAction" type="string" required>
+  Action to take with children and files:
+  - `root` - Move all children folders and files to root level
+  - `folder` - Move all children and files to another folder (requires `targetFolderId`)
+  - `cascade` - Delete the folder and all its children recursively
+</ParamField>
+
+<ParamField body="targetFolderId" type="string">
+  Required when `childrenAction` is `folder`. ID of the folder to move children and files to.
+</ParamField>
+
+### When removing a file (`delete: "file"`)
+
+<ParamField body="id" type="string" required>
+  ID of the file to remove from the folder
+</ParamField>
+
+## Response
+
+### Folder Deletion
+
+Returns a success confirmation.
+
+<ResponseField name="success" type="boolean">
+  Always `true` when the operation succeeds
+</ResponseField>
+
+### File Removal
+
+Returns the updated folder object after removing the file.
+
+## Example Request
+
+```bash Delete folder - move to root
+curl -X DELETE "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "folder",
+    "childrenAction": "root"
+  }'
+```
+
+```bash Delete folder - move to another folder
+curl -X DELETE "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "folder",
+    "childrenAction": "folder",
+    "targetFolderId": "clx456"
+  }'
+```
+
+```bash Delete folder - cascade delete all
+curl -X DELETE "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "folder",
+    "childrenAction": "cascade"
+  }'
+```
+
+```bash Remove file from folder
+curl -X DELETE "https://your-zipline-instance.com/api/user/folders/clx123" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "file",
+    "id": "file123"
+  }'
+```
+
+## Example Response
+
+```json 200 OK - Folder deleted
+{
+  "success": true
+}
+```
+
+```json 200 OK - File removed from folder
+{
+  "id": "clx1234567890",
+  "name": "Screenshots",
+  "public": false,
+  "allowUploads": false,
+  "createdAt": "2024-03-01T10:30:00.000Z",
+  "updatedAt": "2024-03-01T14:45:00.000Z",
+  "userId": "user123",
+  "parentId": null,
+  "files": [
+    {
+      "id": "file456",
+      "name": "xyz789.png",
+      "originalName": "image.png",
+      "type": "image/png",
+      "size": 524288,
+      "views": 10,
+      "maxViews": null,
+      "favorite": false,
+      "password": false
+    }
+  ]
+}
+```
+
+```json 400 Bad Request - Invalid action
+{
+  "error": "Bad Request",
+  "message": "Invalid action",
+  "statusCode": 400
+}
+```
+
+```json 400 Bad Request - File not in folder
+{
+  "error": "Bad Request",
+  "message": "File not in folder",
+  "statusCode": 400
+}
+```
+
+```json 400 Bad Request - Missing file ID
+{
+  "error": "Bad Request",
+  "message": "File id is required",
+  "statusCode": 400
+}
+```
+
+```json 403 Forbidden - Target folder not owned
+{
+  "error": "Forbidden",
+  "message": "Target folder not found",
+  "statusCode": 403
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "Folder not found",
+  "statusCode": 404
+}
+```
+
+## Children Actions Explained
+
+### `root` Action
+- All child folders are moved to root level (their `parentId` is set to `null`)
+- All files in the folder are moved to root level (their `folderId` is set to `null`)
+- The folder itself is then deleted
+
+### `folder` Action
+- All child folders are moved to the specified target folder
+- All files in the folder are moved to the specified target folder
+- The folder itself is then deleted
+- You must own the target folder
+
+### `cascade` Action
+- The folder and all its descendants are deleted recursively
+- This includes all child folders, their children, and so on
+- Files are NOT deleted from the server, only disconnected from folders
+- **Warning**: This cannot be undone
+
+## Notes
+
+- You can only delete folders you own (unless you're an admin)
+- Removing a file from a folder does NOT delete the file - it only removes the folder association
+- When deleting folders, the `childrenAction` parameter is required to prevent accidental data loss
+- Cascade deletion can take time for folders with many nested children

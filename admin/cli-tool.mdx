@@ -1,0 +1,461 @@
+---
+title: CLI Tool (ziplinectl)
+description: Command-line administration tool for Zipline
+---
+
+The `ziplinectl` command-line tool provides direct access to Zipline's database and configuration for administrative tasks. It's useful for automation, troubleshooting, and server management.
+
+## Installation
+
+The CLI tool is included with Zipline installations. Access it via:
+
+**Docker:**
+```bash
+docker exec -it zipline npm run cli -- <command>
+```
+
+**Direct installation:**
+```bash
+ziplinectl <command>
+```
+
+## Available Commands
+
+### read-config
+
+Output the current configuration as JSON, exactly as Zipline interprets it.
+
+```bash
+ziplinectl read-config
+```
+
+**Options:**
+- `-f, --format` - Format the JSON output for readability
+
+**Examples:**
+
+View raw configuration:
+```bash
+ziplinectl read-config
+```
+
+View formatted configuration:
+```bash
+ziplinectl read-config -f
+```
+
+**Use Cases:**
+- Verify configuration is loaded correctly
+- Debug configuration issues
+- Export current settings for documentation
+- Compare configurations across instances
+
+### export-config
+
+Export the current database configuration as environment variables.
+
+```bash
+ziplinectl export-config
+```
+
+**Options:**
+- `-y, --yml` - Export in YAML format (default: false)
+- `-d, --show-defaults` - Include default values (default: only changed values)
+
+**Examples:**
+
+Export changed values as environment variables:
+```bash
+ziplinectl export-config
+```
+
+Output:
+```bash
+CORE_DATABASE_URL="postgres://user:pass@localhost/zipline"
+UPLOADER_DEFAULT_FORMAT="RANDOM"
+UPLOADER_DEFAULT_NAME_LENGTH=12
+```
+
+Export in YAML format:
+```bash
+ziplinectl export-config -y
+```
+
+Output:
+```yaml
+- CORE_DATABASE_URL="postgres://user:pass@localhost/zipline"
+- UPLOADER_DEFAULT_FORMAT="RANDOM"
+- UPLOADER_DEFAULT_NAME_LENGTH=12
+```
+
+Include all values (including defaults):
+```bash
+ziplinectl export-config -d
+```
+
+**Use Cases:**
+- Generate .env file from database configuration
+- Document current configuration
+- Migrate from database to environment variable configuration
+- Create configuration templates
+
+<Note>
+The `CORE_SECRET` is replaced with a random value in exports for security. The `CORE_DATABASE_URL` is set to a placeholder value.
+</Note>
+
+### list-users
+
+List all users in the Zipline instance.
+
+```bash
+ziplinectl list-users
+```
+
+**Options:**
+- `-f, --format` - Format the JSON output
+- `-i, --id [user_id]` - List a specific user by ID
+- `-e, --extra [properties...]` - Include additional properties
+
+**Examples:**
+
+List all users with basic info:
+```bash
+ziplinectl list-users
+```
+
+Format output for readability:
+```bash
+ziplinectl list-users -f
+```
+
+List a specific user:
+```bash
+ziplinectl list-users -i abc123def456
+```
+
+See available properties:
+```bash
+ziplinectl list-users -e list
+```
+
+Include specific properties:
+```bash
+ziplinectl list-users -f -e token avatar role
+```
+
+Include multiple properties:
+```bash
+ziplinectl list-users -f -e username role createdAt token
+```
+
+**Default Properties:**
+
+By default, `list-users` returns:
+- `id` - User ID
+- `username` - Username
+- `createdAt` - Account creation date
+- `updatedAt` - Last update timestamp
+- `role` - User role (USER, ADMIN, SUPERADMIN)
+
+**Additional Properties:**
+
+Use `-e` to include:
+- `token` - API token
+- `avatar` - Avatar data
+- `totpSecret` - TOTP secret for 2FA
+- `password` - Hashed password
+- `view` - View preferences
+- And more (use `-e list` to see all)
+
+### set-user
+
+Modify user properties directly in the database.
+
+```bash
+ziplinectl set-user -i <user_id> <property> <value>
+```
+
+**Options:**
+- `-i, --id <user_id>` (required) - User ID to modify
+
+**Supported Properties:**
+
+| Property | Description | Example Value |
+|----------|-------------|---------------|
+| `username` | Username | `john_doe` |
+| `password` | Password (auto-hashed) | `newSecurePass123` |
+| `role` | User role | `ADMIN`, `USER`, `SUPERADMIN` |
+| `avatar` | Avatar URL or base64 | `https://example.com/avatar.png` |
+| `token` | API token | `custom_token_123` |
+| `totpSecret` | TOTP secret | `base32secret` |
+
+**Examples:**
+
+Reset user password:
+```bash
+ziplinectl set-user -i abc123 password MyNewPassword123
+```
+
+Change role to admin:
+```bash
+ziplinectl set-user -i abc123 role ADMIN
+```
+
+Update username:
+```bash
+ziplinectl set-user -i abc123 username john_smith
+```
+
+Set custom avatar:
+```bash
+ziplinectl set-user -i abc123 avatar https://example.com/avatar.jpg
+```
+
+Change API token:
+```bash
+ziplinectl set-user -i abc123 token my_custom_token_here
+```
+
+**Special Handling:**
+
+- **Passwords**: Automatically hashed before storage (displayed as `*********` in output)
+- **Roles**: Validated against allowed values (USER, ADMIN, SUPERADMIN)
+- **Booleans**: Can use `true` or `false` as values
+
+**Output:**
+
+```bash
+updated user(abc123) -> password = *********
+```
+
+### import-dir
+
+Import files from a directory into Zipline.
+
+```bash
+ziplinectl import-dir <directory>
+```
+
+**Options:**
+- `-i, --id [user_id]` - User ID to own the files (default: administrator SUPERADMIN)
+- `-f, --folder [folder_id]` - Folder ID to place files in
+- `--skip-db` - Don't add files to database
+- `--skip-ds` - Don't add files to datasource
+
+**Arguments:**
+- `<directory>` (required) - Path to directory containing files
+
+**Examples:**
+
+Import directory for default admin user:
+```bash
+ziplinectl import-dir /path/to/files
+```
+
+Import for specific user:
+```bash
+ziplinectl import-dir -i user_id_here /path/to/files
+```
+
+Import into specific folder:
+```bash
+ziplinectl import-dir -i user_id -f folder_id /path/to/files
+```
+
+Add to database only (don't upload to datasource):
+```bash
+ziplinectl import-dir --skip-ds /path/to/files
+```
+
+**Import Process:**
+
+<Steps>
+  <Step title="Directory Validation">
+    Verify the provided path is a valid directory
+  </Step>
+  
+  <Step title="User Resolution">
+    Find the target user (administrator SUPERADMIN or specified user)
+  </Step>
+  
+  <Step title="Folder Validation">
+    If folder specified, verify it exists and belongs to the user
+  </Step>
+  
+  <Step title="File Discovery">
+    Scan directory for files (skips .thumbnail files)
+  </Step>
+  
+  <Step title="Database Insert">
+    Create database records for all files (unless --skip-db)
+  </Step>
+  
+  <Step title="Datasource Upload">
+    Upload each file to configured datasource with progress tracking
+  </Step>
+</Steps>
+
+**Progress Output:**
+
+```bash
+Inserting 150 files into the database.
+Uploading photo1.jpg (2.5 MB)...
+Uploaded photo1.jpg in 1.2s (2.5 MB) 1/150 2.5 MB/375 MB 2.08 MB/s
+Uploading video.mp4 (50 MB)...
+Uploaded video.mp4 in 8.3s (50 MB) 2/150 52.5 MB/375 MB 6.02 MB/s
+...
+Done importing 150 files.
+```
+
+**File Metadata:**
+
+For each file, Zipline automatically detects:
+- MIME type (based on file extension)
+- File size
+- Original filename
+
+**Default User Selection:**
+
+If no user ID is specified, `import-dir` searches for:
+1. User with username "administrator" and role "SUPERADMIN"
+2. First user with role "SUPERADMIN"
+3. Errors if no SUPERADMIN found
+
+<Warning>
+**Import Considerations:**
+
+- Files are not deleted from the source directory
+- Large imports may take significant time
+- Ensure sufficient datasource storage space
+- Database records are created before uploads (use --skip-db to prevent)
+</Warning>
+
+## Command Usage Patterns
+
+### Automation Scripts
+
+Combine commands for automation:
+
+```bash
+#!/bin/bash
+# Reset user password and display info
+
+USER_ID="abc123"
+NEW_PASSWORD="TempPassword123"
+
+ziplinectl set-user -i $USER_ID password $NEW_PASSWORD
+ziplinectl list-users -f -i $USER_ID
+```
+
+### Bulk Operations
+
+Process multiple users:
+
+```bash
+#!/bin/bash
+# Set all users to regular USER role
+
+ziplinectl list-users | jq -r '.[].id' | while read user_id; do
+  ziplinectl set-user -i $user_id role USER
+done
+```
+
+### Configuration Migration
+
+Export configuration for migration:
+
+```bash
+# Export current config
+ziplinectl export-config > .env.backup
+
+# Edit and apply to new instance
+```
+
+## Docker Integration
+
+When running Zipline in Docker:
+
+```bash
+# Read configuration
+docker exec -it zipline npm run cli -- read-config -f
+
+# List users
+docker exec -it zipline npm run cli -- list-users -f
+
+# Set user property
+docker exec -it zipline npm run cli -- set-user -i abc123 role ADMIN
+
+# Import directory (mount host directory first)
+docker exec -it zipline npm run cli -- import-dir /app/import
+```
+
+## Error Handling
+
+### Common Errors
+
+**User not found:**
+```
+User not found
+```
+Verify the user ID is correct with `list-users`.
+
+**Unsupported field:**
+```
+Unsupported field: invalid_property
+```
+Check the supported properties for the command.
+
+**Invalid role:**
+```
+Invalid role: INVALID
+```
+Valid roles are: USER, ADMIN, SUPERADMIN.
+
+**Directory not found:**
+```
+Not a directory: /invalid/path
+```
+Verify the path exists and is a directory.
+
+**No superadmin found:**
+```
+No superadmin found or "administrator" user.
+```
+Create a SUPERADMIN user first or specify user ID with `-i`.
+
+## Security Considerations
+
+<Warning>
+**CLI Tool Security:**
+
+- CLI commands have direct database access
+- No authentication or authorization checks
+- Changes are immediate and irreversible
+- Passwords are displayed as `*********` in output but exist in shell history
+- Use caution when modifying user roles and permissions
+- Limit CLI access to trusted administrators only
+</Warning>
+
+## Best Practices
+
+<Steps>
+  <Step title="Backup First">
+    Always backup your database before bulk operations
+  </Step>
+  
+  <Step title="Test on Single User">
+    Test commands on a single user before bulk operations
+  </Step>
+  
+  <Step title="Use Scripts">
+    Create scripts for repetitive tasks to reduce errors
+  </Step>
+  
+  <Step title="Verify Changes">
+    Use `list-users` to verify changes after modifications
+  </Step>
+  
+  <Step title="Secure Shell History">
+    Clear or disable shell history when using sensitive commands
+  </Step>
+</Steps>

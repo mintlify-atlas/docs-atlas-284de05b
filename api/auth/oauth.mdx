@@ -1,0 +1,269 @@
+---
+title: OAuth
+description: OAuth provider management and authentication endpoints
+---
+
+## OAuth Providers
+
+Zipline supports OAuth authentication with multiple providers:
+- GitHub
+- Discord
+- Google
+- OpenID Connect (OIDC)
+
+---
+
+## GET /api/auth/oauth
+
+Retrieve all OAuth providers connected to the authenticated user's account.
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Response
+
+<ResponseField name="root" type="array">
+  Array of OAuth provider objects connected to the user
+  
+  <Expandable title="OAuthProvider properties">
+    <ResponseField name="id" type="string">
+      Unique provider connection identifier
+    </ResponseField>
+    
+    <ResponseField name="provider" type="string">
+      Provider type: `DISCORD`, `GOOGLE`, `GITHUB`, or `OIDC`
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Username from the OAuth provider
+    </ResponseField>
+    
+    <ResponseField name="oauthId" type="string">
+      User ID from the OAuth provider
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when the provider was connected
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET https://your-zipline-instance.com/api/auth/oauth \
+  -H "Authorization: your-api-token"
+```
+
+### Example Response
+
+```json
+[
+  {
+    "id": "clx1234567890",
+    "provider": "GITHUB",
+    "username": "johndoe",
+    "oauthId": "12345678",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  },
+  {
+    "id": "clx0987654321",
+    "provider": "DISCORD",
+    "username": "JohnDoe#1234",
+    "oauthId": "987654321098765432",
+    "createdAt": "2024-02-20T14:22:00.000Z",
+    "updatedAt": "2024-02-20T14:22:00.000Z"
+  }
+]
+```
+
+---
+
+## DELETE /api/auth/oauth
+
+Remove an OAuth provider from the authenticated user's account.
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Request Body
+
+<ParamField body="provider" type="string" required>
+  The OAuth provider to remove: `DISCORD`, `GOOGLE`, `GITHUB`, or `OIDC`
+</ParamField>
+
+### Response
+
+Returns the updated array of OAuth providers after removal.
+
+### Validation Rules
+
+- Cannot delete the last OAuth provider if the user has no password set
+- User must have at least one authentication method (OAuth or password)
+
+### Error Responses
+
+- `400 Bad Request` - No providers to delete
+- `400 Bad Request` - You can't delete your last oauth provider without a password
+- `401 Unauthorized` - No active session or invalid authentication
+
+### Example Request
+
+```bash
+curl -X DELETE https://your-zipline-instance.com/api/auth/oauth \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "GITHUB"
+  }'
+```
+
+### Example Response
+
+```json
+[
+  {
+    "id": "clx0987654321",
+    "provider": "DISCORD",
+    "username": "JohnDoe#1234",
+    "oauthId": "987654321098765432",
+    "createdAt": "2024-02-20T14:22:00.000Z",
+    "updatedAt": "2024-02-20T14:22:00.000Z"
+  }
+]
+```
+
+---
+
+## OAuth Authentication Endpoints
+
+### GET /api/auth/oauth/github
+
+Initiate or complete GitHub OAuth authentication flow.
+
+#### Query Parameters
+
+<ParamField query="code" type="string">
+  OAuth authorization code (provided by GitHub after user authorization)
+</ParamField>
+
+<ParamField query="state" type="string">
+  Optional state parameter. Use `link` to link an OAuth provider to an existing account.
+</ParamField>
+
+#### Behavior
+
+- **Without code**: Redirects to GitHub authorization page
+- **With code**: Exchanges code for access token and creates/links account
+
+---
+
+### GET /api/auth/oauth/discord
+
+Initiate or complete Discord OAuth authentication flow.
+
+#### Query Parameters
+
+<ParamField query="code" type="string">
+  OAuth authorization code (provided by Discord after user authorization)
+</ParamField>
+
+<ParamField query="state" type="string">
+  Optional state parameter. Use `link` to link an OAuth provider to an existing account.
+</ParamField>
+
+#### Additional Features
+
+- Supports `allowedIds` and `deniedIds` configuration for access control
+- Fetches user avatar from Discord CDN
+
+---
+
+### GET /api/auth/oauth/google
+
+Initiate or complete Google OAuth authentication flow.
+
+#### Query Parameters
+
+<ParamField query="code" type="string">
+  OAuth authorization code (provided by Google after user authorization)
+</ParamField>
+
+<ParamField query="state" type="string">
+  Optional state parameter. Use `link` to link an OAuth provider to an existing account.
+</ParamField>
+
+#### Scopes
+
+- User profile information
+- Email address (used as fallback username)
+
+---
+
+### GET /api/auth/oauth/oidc
+
+Initiate or complete OpenID Connect OAuth authentication flow.
+
+#### Query Parameters
+
+<ParamField query="code" type="string">
+  OAuth authorization code (provided by OIDC provider after user authorization)
+</ParamField>
+
+<ParamField query="state" type="string">
+  Optional state parameter. Use `link` to link an OAuth provider to an existing account.
+</ParamField>
+
+#### Configuration Required
+
+- `clientId` - OIDC client ID
+- `clientSecret` - OIDC client secret
+- `authorizeUrl` - Authorization endpoint URL
+- `tokenUrl` - Token endpoint URL
+- `userinfoUrl` - User info endpoint URL
+
+#### Username Resolution
+
+The username is determined from OIDC claims in this order:
+1. `preferred_username`
+2. `name`
+3. `given_name`
+4. `email`
+5. `sub`
+
+---
+
+## OAuth Flow
+
+1. **Initiate**: User clicks OAuth login button
+2. **Redirect**: User is redirected to provider's authorization page
+3. **Authorize**: User authorizes the application
+4. **Callback**: Provider redirects back with authorization code
+5. **Exchange**: Server exchanges code for access token
+6. **User Info**: Server fetches user information from provider
+7. **Account**: Server creates new account or links to existing account
+8. **Session**: Server creates session and logs user in
+
+## Configuration Requirements
+
+OAuth registration must be enabled in the server configuration (`features.oauthRegistration`). Each provider also requires specific configuration:
+
+- **GitHub**: `clientId`, `clientSecret`, optional `redirectUri`
+- **Discord**: `clientId`, `clientSecret`, optional `redirectUri`, optional `allowedIds`/`deniedIds`
+- **Google**: `clientId`, `clientSecret`, optional `redirectUri`
+- **OIDC**: `clientId`, `clientSecret`, `authorizeUrl`, `tokenUrl`, `userinfoUrl`, optional `redirectUri`
+
+## Error Responses
+
+- `403 Forbidden` - OAuth registration is disabled
+- `401 Unauthorized` - Provider is not configured
+- `400 Bad Request` - Failed to fetch access token
+- `400 Bad Request` - Failed to fetch user information
+- `400 Bad Request` - User not allowed (Discord with allowedIds/deniedIds)

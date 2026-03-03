@@ -1,0 +1,200 @@
+---
+title: 'Create Folder'
+description: 'Create a new folder for organizing files'
+---
+
+Create a new folder to organize your files. You can optionally add existing files to the folder during creation and set it as a child of another folder.
+
+## Endpoint
+
+```http
+POST /api/user/folders
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Rate Limiting
+
+This endpoint is rate limited to 2 requests per second.
+
+## Request Body
+
+<ParamField body="name" type="string" required>
+  The name of the folder. Must be at least 1 character after trimming whitespace.
+</ParamField>
+
+<ParamField body="isPublic" type="boolean" default="false">
+  Whether the folder should be publicly accessible.
+</ParamField>
+
+<ParamField body="files" type="array">
+  Array of file IDs to add to the folder during creation.
+</ParamField>
+
+<ParamField body="parentId" type="string">
+  ID of the parent folder. If provided, this folder will be created as a child of the specified parent.
+</ParamField>
+
+## Response
+
+Returns the created folder object with all its properties.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the folder
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The folder name
+</ResponseField>
+
+<ResponseField name="public" type="boolean" required>
+  Whether the folder is publicly accessible
+</ResponseField>
+
+<ResponseField name="allowUploads" type="boolean" required>
+  Whether uploads are allowed to this folder (defaults to `false`)
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the folder was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp of when the folder was last updated
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  ID of the user who owns this folder
+</ResponseField>
+
+<ResponseField name="parentId" type="string | null">
+  ID of the parent folder, or `null` if this is a root folder
+</ResponseField>
+
+<ResponseField name="files" type="array">
+  Array of file objects in this folder
+</ResponseField>
+
+<ResponseField name="_count" type="object">
+  Counts of related entities
+  
+  <Expandable title="Count properties">
+    <ResponseField name="children" type="number">
+      Number of child folders (will be 0 for new folders)
+    </ResponseField>
+    <ResponseField name="files" type="number">
+      Number of files in this folder
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="parent" type="object | null">
+  Parent folder information, or `null` if this is a root folder
+  
+  <Expandable title="Parent properties">
+    <ResponseField name="id" type="string">
+      Parent folder ID
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Parent folder name
+    </ResponseField>
+    <ResponseField name="parentId" type="string | null">
+      ID of the parent's parent folder
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+```bash Create basic folder
+curl -X POST "https://your-zipline-instance.com/api/user/folders" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Screenshots"
+  }'
+```
+
+```bash Create public folder
+curl -X POST "https://your-zipline-instance.com/api/user/folders" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Public Gallery",
+    "isPublic": true
+  }'
+```
+
+```bash Create folder with files
+curl -X POST "https://your-zipline-instance.com/api/user/folders" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Project Assets",
+    "files": ["file123", "file456"]
+  }'
+```
+
+```bash Create nested folder
+curl -X POST "https://your-zipline-instance.com/api/user/folders" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "2024",
+    "parentId": "parent_folder_id"
+  }'
+```
+
+## Example Response
+
+```json 200 OK
+{
+  "id": "clx1234567890",
+  "name": "Screenshots",
+  "public": false,
+  "allowUploads": false,
+  "createdAt": "2024-03-01T10:30:00.000Z",
+  "updatedAt": "2024-03-01T10:30:00.000Z",
+  "userId": "user123",
+  "parentId": null,
+  "files": [],
+  "_count": {
+    "children": 0,
+    "files": 0
+  },
+  "parent": null
+}
+```
+
+```json 400 Bad Request - No files found
+{
+  "error": "Bad Request",
+  "message": "No files found, with given request",
+  "statusCode": 400
+}
+```
+
+```json 403 Forbidden - Parent folder not owned
+{
+  "error": "Forbidden",
+  "message": "Parent folder does not belong to you",
+  "statusCode": 403
+}
+```
+
+```json 404 Not Found - Invalid parent
+{
+  "error": "Not Found",
+  "message": "Parent folder not found",
+  "statusCode": 404
+}
+```
+
+## Notes
+
+- Folder names are trimmed of whitespace before being saved
+- If you provide file IDs that don't exist, the request will fail
+- Files must exist and be accessible before they can be added to a folder
+- Parent folders must belong to the authenticated user

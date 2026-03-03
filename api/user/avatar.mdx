@@ -1,0 +1,59 @@
+---
+title: User Avatar
+description: Retrieve the authenticated user's avatar image
+---
+
+## Get Avatar
+
+<Card title="GET /api/user/avatar" icon="image">
+  Retrieve the user's avatar image. Returns the raw avatar data (Base64 string or URL).
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user/avatar \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Response
+
+Returns the avatar as a raw string (either Base64-encoded image data or a URL).
+
+```text Example Response
+data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+```
+
+### Errors
+
+- **404 Not Found**: User has no avatar set
+
+<Warning>
+  This endpoint returns the raw avatar string, not a JSON object. If no avatar is set, you'll receive a 404 error instead of null.
+</Warning>
+
+## Update Avatar
+
+To update your avatar, use the [PATCH /api/user](/api/user/profile#update-user-profile) endpoint with the `avatar` field:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "avatar": "data:image/png;base64,iVBORw0KGgo..."
+  }'
+```
+
+## Remove Avatar
+
+To remove your avatar, set the `avatar` field to `null`:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "avatar": null
+  }'
+```

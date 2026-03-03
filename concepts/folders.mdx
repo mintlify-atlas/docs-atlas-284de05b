@@ -1,0 +1,400 @@
+---
+title: Folders
+description: Organize your uploads with folders, including nested hierarchies, public folders, and folder-specific upload permissions
+---
+
+Folders in Zipline help you organize your uploaded files into logical groups. They support nested hierarchies, public sharing, and controlled upload access.
+
+## Creating folders
+
+### Via the dashboard
+
+1. Navigate to the Files section
+2. Click "New Folder"
+3. Enter a folder name
+4. Optionally configure:
+   - Public visibility
+   - Allow uploads from others
+   - Parent folder (for nesting)
+
+### Via the API
+
+Create a folder with the API:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/folders \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Screenshots",
+    "isPublic": false
+  }'
+```
+
+Response:
+```json
+{
+  "id": "folder_abc123",
+  "name": "Screenshots",
+  "public": false,
+  "allowUploads": false,
+  "createdAt": "2026-03-03T10:00:00.000Z",
+  "count": {
+    "files": 0,
+    "children": 0
+  }
+}
+```
+
+## Folder structure
+
+Each folder in the database contains:
+
+```typescript
+{
+  id: string              // Unique folder ID
+  name: string            // Folder name
+  public: boolean         // Public visibility
+  allowUploads: boolean   // Allow anonymous uploads
+  parentId: string | null // Parent folder for nesting
+  userId: string          // Owner user ID
+  files: File[]           // Files in this folder
+  children: Folder[]      // Nested subfolders
+}
+```
+
+See the Prisma schema at `prisma/schema.prisma:310-327`.
+
+## Nested folders
+
+Folders support unlimited nesting depth:
+
+```
+Projects/
+├── Client A/
+│   ├── Designs/
+│   └── Documents/
+└── Client B/
+    └── Assets/
+```
+
+### Creating nested folders
+
+```bash
+curl -X POST https://your-zipline.com/api/user/folders \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Designs",
+    "parentId": "parent_folder_id"
+  }'
+```
+
+<Warning>
+You cannot move a folder into one of its own descendants. Zipline prevents circular references by checking the parent chain.
+</Warning>
+
+### Viewing folder hierarchy
+
+Get a folder with its parent chain:
+
+```bash
+curl https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Response includes:
+```json
+{
+  "id": "folder_abc123",
+  "name": "Designs",
+  "parent": {
+    "id": "parent_folder_id",
+    "name": "Client A",
+    "parentId": "root_folder_id"
+  },
+  "children": [...],
+  "files": [...]
+}
+```
+
+The parent chain is built recursively in `src/lib/db/models/folder/buildParentChain`.
+
+## Adding files to folders
+
+### During upload
+
+Upload directly to a folder:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Folder: folder_id_here" \
+  -F "file=@screenshot.png"
+```
+
+The file is immediately added to the folder.
+
+### After upload
+
+Move an existing file to a folder:
+
+```bash
+curl -X PUT https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "file_id"}'
+```
+
+### Creating folder with files
+
+Create a folder and add files in one request:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/folders \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "New Folder",
+    "files": ["file_id_1", "file_id_2"]
+  }'
+```
+
+## Public folders
+
+Public folders can be shared with others:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"isPublic": true}'
+```
+
+<Info>
+Public folders show their contents to anyone with the link, but users must still be authenticated to view individual files unless the files themselves are public.
+</Info>
+
+## Upload permissions
+
+### Allowing uploads
+
+Enable anonymous uploads to a folder:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"allowUploads": true}'
+```
+
+Now anyone can upload to this folder without authentication:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "X-Zipline-Folder: folder_id" \
+  -F "file=@submission.pdf"
+```
+
+<Note>
+Files uploaded anonymously to a folder are owned by the folder owner and count toward their quota.
+</Note>
+
+See the implementation in `src/server/routes/api/upload/index.ts:51-60`.
+
+## Managing folders
+
+### Updating folder properties
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Name",
+    "isPublic": false,
+    "allowUploads": false,
+    "parentId": "new_parent_id"
+  }'
+```
+
+All fields are optional - only include what you want to change.
+
+### Moving folders
+
+Change the parent folder:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"parentId": "new_parent_id"}'
+```
+
+To move to root level:
+```bash
+curl -X PATCH https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"parentId": null}'
+```
+
+## Deleting folders
+
+When deleting a folder, you must specify what happens to its contents:
+
+### Move to root
+
+Move all files and subfolders to the root level:
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "folder",
+    "childrenAction": "root"
+  }'
+```
+
+### Move to another folder
+
+Move contents to a different folder:
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "folder",
+    "childrenAction": "folder",
+    "targetFolderId": "destination_folder_id"
+  }'
+```
+
+### Cascade delete
+
+Delete the folder and all its contents recursively:
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "folder",
+    "childrenAction": "cascade"
+  }'
+```
+
+<Warning>
+Cascade delete permanently removes all files and subfolders. This action cannot be undone.
+</Warning>
+
+See the implementation in `src/server/routes/api/user/folders/[id]/index.ts:242-328`.
+
+### Removing files from folders
+
+Remove a file without deleting it:
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/folders/folder_id \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": "file",
+    "id": "file_id"
+  }'
+```
+
+The file remains in your library but is no longer in the folder.
+
+## Querying folders
+
+### List all folders
+
+```bash
+curl https://your-zipline.com/api/user/folders \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### List root folders only
+
+```bash
+curl "https://your-zipline.com/api/user/folders?root=true" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### List folders by parent
+
+```bash
+curl "https://your-zipline.com/api/user/folders?parentId=parent_folder_id" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Get folder without files
+
+For performance, exclude file details:
+
+```bash
+curl "https://your-zipline.com/api/user/folders/folder_id?noincl=true" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+## Exporting folders
+
+Zipline supports exporting entire folders as ZIP archives:
+
+```bash
+curl -X POST https://your-zipline.com/api/user/folders/folder_id/export \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+The export is processed asynchronously and includes all files in the folder.
+
+See `src/server/routes/api/user/folders/[id]/export.ts` for implementation.
+
+## Folder statistics
+
+Each folder response includes file and subfolder counts:
+
+```json
+{
+  "id": "folder_abc123",
+  "name": "Projects",
+  "count": {
+    "files": 42,
+    "children": 3
+  }
+}
+```
+
+This is computed using Prisma's `_count` feature.
+
+## FAQs
+
+<AccordionGroup>
+  <Accordion title="What's the maximum folder nesting depth?">
+    There's no hard limit, but very deep nesting (>10 levels) may impact performance when building parent chains. Keep your folder structure reasonable for best performance.
+  </Accordion>
+
+  <Accordion title="Can multiple users share a folder?">
+    No, folders are owned by a single user. However, you can make a folder public or enable uploads to allow others to contribute.
+  </Accordion>
+
+  <Accordion title="What happens to folder files when I reach my quota?">
+    Files in folders count toward your quota. If you exceed your quota, you won't be able to upload new files to any folder until you free up space.
+  </Accordion>
+
+  <Accordion title="Can I move files between folders?">
+    Yes, you can add files to folders or remove them at any time. A file can only be in one folder at a time.
+  </Accordion>
+
+  <Accordion title="How do I prevent a folder from being moved into itself?">
+    Zipline automatically prevents circular references. When updating a folder's parent, the system checks the entire parent chain to ensure the folder isn't being moved into one of its descendants.
+  </Accordion>
+</AccordionGroup>
+
+## See also
+
+- [Uploads](/concepts/uploads) - Learn about uploading files
+- [Storage](/concepts/storage) - Understand where files are stored

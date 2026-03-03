@@ -1,0 +1,302 @@
+---
+title: Server Settings
+description: View and update Zipline server configuration
+---
+
+<Warning>
+  **Authentication Required**: These endpoints require `ADMIN` or `SUPERADMIN` role.
+</Warning>
+
+## Get Settings
+
+<Card title="GET /api/server/settings" icon="gear">
+  Retrieve all server configuration settings.
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/server/settings \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+### Response
+
+<ResponseField name="settings" type="object">
+  Complete server configuration object containing all settings categories
+</ResponseField>
+
+<ResponseField name="tampered" type="string[]">
+  Array of setting keys that have been overridden by environment variables. These settings cannot be changed via the API.
+</ResponseField>
+
+```json Example Response (Partial)
+{
+  "settings": {
+    "coreReturnHttpsUrls": false,
+    "coreDefaultDomain": "zipline.example.com",
+    "coreTempDirectory": "/tmp/zipline",
+    "coreTrustProxy": false,
+    
+    "chunksEnabled": true,
+    "chunksMax": "95mb",
+    "chunksSize": "25mb",
+    
+    "filesRoute": "/u",
+    "filesLength": 6,
+    "filesDefaultFormat": "random",
+    "filesDisabledExtensions": [],
+    "filesMaxFileSize": "100mb",
+    "filesDefaultExpiration": null,
+    "filesMaxExpiration": null,
+    
+    "urlsRoute": "/go",
+    "urlsLength": 6,
+    
+    "featuresUserRegistration": false,
+    "featuresOauthRegistration": false,
+    "featuresImageCompression": true,
+    "featuresMetricsEnabled": true,
+    
+    "invitesEnabled": true,
+    "invitesLength": 6,
+    
+    "websiteTitle": "Zipline",
+    "websiteThemeDefault": "system",
+    
+    "mfaTotpEnabled": false,
+    "mfaPasskeysEnabled": false,
+    
+    "ratelimitEnabled": true,
+    "ratelimitMax": 10,
+    "ratelimitAdminBypass": true,
+    
+    "domains": []
+  },
+  "tampered": []
+}
+```
+
+### Settings Categories
+
+Settings are organized into the following categories:
+
+#### Core Settings
+- `coreReturnHttpsUrls`: Return HTTPS URLs
+- `coreDefaultDomain`: Default domain for file URLs
+- `coreTempDirectory`: Temporary file directory
+- `coreTrustProxy`: Trust proxy headers
+
+#### Chunked Uploads
+- `chunksEnabled`: Enable chunked uploads
+- `chunksMax`: Maximum total upload size
+- `chunksSize`: Size of each chunk
+
+#### Task Intervals
+- `tasksDeleteInterval`: Interval for delete task
+- `tasksClearInvitesInterval`: Interval for clearing expired invites
+- `tasksMaxViewsInterval`: Interval for max views check
+- `tasksThumbnailsInterval`: Interval for thumbnail generation
+- `tasksMetricsInterval`: Interval for metrics collection
+- `tasksCleanThumbnailsInterval`: Interval for thumbnail cleanup
+
+#### Files
+- `filesRoute`: URL route for files
+- `filesLength`: Filename length
+- `filesDefaultFormat`: Default filename format (`random`, `date`, `uuid`, `name`, `gfycat`)
+- `filesDisabledExtensions`: Blocked file extensions
+- `filesMaxFileSize`: Maximum file size
+- `filesDefaultExpiration`: Default file expiration
+- `filesMaxExpiration`: Maximum allowed expiration
+- `filesAssumeMimetypes`: Assume MIME types from extensions
+- `filesDefaultDateFormat`: Date format for filenames
+- `filesRemoveGpsMetadata`: Strip GPS metadata from images
+- `filesRandomWordsNumAdjectives`: Number of adjectives in random names
+- `filesRandomWordsSeparator`: Separator for random words
+- `filesDefaultCompressionFormat`: Default image compression format
+
+#### URLs
+- `urlsRoute`: URL route for shortened URLs
+- `urlsLength`: Short URL code length
+
+#### Features
+- `featuresImageCompression`: Enable image compression
+- `featuresRobotsTxt`: Enable robots.txt
+- `featuresHealthcheck`: Enable healthcheck endpoint
+- `featuresUserRegistration`: Allow user registration
+- `featuresOauthRegistration`: Allow OAuth registration
+- `featuresDeleteOnMaxViews`: Delete files when max views reached
+- `featuresThumbnailsEnabled`: Enable thumbnail generation
+- `featuresThumbnailsNumberThreads`: Number of thumbnail threads
+- `featuresThumbnailsFormat`: Thumbnail format
+- `featuresMetricsEnabled`: Enable metrics collection
+- `featuresMetricsAdminOnly`: Restrict metrics to admins
+- `featuresMetricsShowUserSpecific`: Show user-specific metrics
+- `featuresVersionChecking`: Check for updates
+- `featuresVersionAPI`: Version check API URL
+
+#### Invites
+- `invitesEnabled`: Enable invite system
+- `invitesLength`: Invite code length
+
+#### Website
+- `websiteTitle`: Site title
+- `websiteTitleLogo`: Logo URL
+- `websiteExternalLinks`: External links in navigation
+- `websiteLoginBackground`: Login background image
+- `websiteLoginBackgroundBlur`: Blur login background
+- `websiteDefaultAvatar`: Default avatar path
+- `websiteTos`: Terms of Service file path
+- `websiteThemeDefault`: Default theme
+- `websiteThemeDark`: Dark theme ID
+- `websiteThemeLight`: Light theme ID
+
+#### OAuth
+- `oauthBypassLocalLogin`: Bypass local login
+- `oauthLoginOnly`: OAuth-only login
+- Discord, Google, GitHub, OIDC OAuth settings
+
+#### MFA
+- `mfaTotpEnabled`: Enable TOTP
+- `mfaTotpIssuer`: TOTP issuer name
+- `mfaPasskeysEnabled`: Enable passkeys
+- `mfaPasskeysRpID`: Passkey relying party ID
+- `mfaPasskeysOrigin`: Passkey origin
+
+#### Rate Limiting
+- `ratelimitEnabled`: Enable rate limiting
+- `ratelimitMax`: Max requests
+- `ratelimitWindow`: Time window
+- `ratelimitAdminBypass`: Allow admins to bypass
+- `ratelimitAllowList`: IP allowlist
+
+#### Webhooks
+- `httpWebhookOnUpload`: HTTP webhook on upload
+- `httpWebhookOnShorten`: HTTP webhook on shorten
+- Discord webhook settings
+
+#### PWA
+- `pwaEnabled`: Enable Progressive Web App
+- PWA configuration (title, colors, etc.)
+
+#### Domains
+- `domains`: Allowed domains for file URLs
+
+---
+
+## Update Settings
+
+<Card title="PATCH /api/server/settings" icon="floppy-disk">
+  Update server configuration. Only provided fields will be updated.
+</Card>
+
+### Request
+
+Send a partial settings object with only the fields you want to update. All fields are optional.
+
+```bash Enable user registration
+curl -X PATCH https://your-zipline.com/api/server/settings \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "featuresUserRegistration": true
+  }'
+```
+
+```bash Update file settings
+curl -X PATCH https://your-zipline.com/api/server/settings \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filesMaxFileSize": "500mb",
+    "filesDefaultExpiration": "30d",
+    "filesDisabledExtensions": ["exe", "bat", "sh"]
+  }'
+```
+
+```bash Configure TOTP
+curl -X PATCH https://your-zipline.com/api/server/settings \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mfaTotpEnabled": true,
+    "mfaTotpIssuer": "My Zipline Instance"
+  }'
+```
+
+```bash Update domains
+curl -X PATCH https://your-zipline.com/api/server/settings \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domains": ["files.example.com", "cdn.example.org"]
+  }'
+```
+
+### Response
+
+Returns the complete updated settings object in the same format as GET.
+
+### Validation
+
+Settings are strictly validated:
+
+- **Routes** must start with `/` and not conflict with reserved routes (`/dashboard`, `/api`, `/auth`, etc.)
+- **File sizes** must be valid (e.g., `"100mb"`, `"5gb"`)
+- **Time intervals** must be valid duration strings (e.g., `"30m"`, `"1h"`, `"7d"`)
+- **URLs** must be properly formatted
+- **Numbers** must be within acceptable ranges
+- **File paths** must exist on the server
+- **OAuth settings** must be complete (all fields required if any are provided)
+
+### Errors
+
+- **400 Bad Request**: Validation failed
+- **429 Too Many Requests**: Rate limit exceeded (1 request per second)
+
+```json Example Validation Error
+{
+  "statusCode": 400,
+  "issues": [
+    {
+      "code": "custom",
+      "message": "Provided route is reserved",
+      "path": ["filesRoute"]
+    },
+    {
+      "code": "custom",
+      "message": "Value must be greater than 0",
+      "path": ["filesMaxFileSize"]
+    }
+  ]
+}
+```
+
+### Rate Limiting
+
+This endpoint is rate-limited to **1 request per second**.
+
+<Warning>
+  Settings changes take effect immediately and may require restarting certain services or tasks. Some settings (like database URL) cannot be changed via API and must be set via environment variables.
+</Warning>
+
+<Note>
+  Settings overridden by environment variables appear in the `tampered` array and cannot be modified via the API. You must change the environment variable and restart the server.
+</Note>
+
+---
+
+## Reserved Routes
+
+The following routes are reserved and cannot be used for `filesRoute` or `urlsRoute`:
+
+- `/dashboard`
+- `/auth`
+- `/api`
+- `/raw`
+- `/r`
+- `/invite`
+- `/view`
+- `/robots.txt`
+- `/manifest.json`
+- `/favicon.ico`

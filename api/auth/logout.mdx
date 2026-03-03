@@ -1,0 +1,63 @@
+---
+title: Logout
+description: End the current user session
+---
+
+## GET /api/auth/logout
+
+Logs out the current authenticated user by destroying their session.
+
+### Authentication
+
+This endpoint requires authentication. The user must have an active session.
+
+### Request
+
+No request body or query parameters required.
+
+### Response
+
+<ResponseField name="loggedOut" type="boolean">
+  Indicates whether the logout was successful. Always returns `true` on success.
+</ResponseField>
+
+### Behavior
+
+1. Retrieves the current user's session
+2. Deletes the session from the database
+3. Destroys the session cookie
+4. Logs the logout event with user information and IP address
+
+### Error Responses
+
+- `401 Unauthorized` - No active session or invalid authentication
+- `403 Forbidden` - User does not have permission to perform this action
+
+### Example Request
+
+```bash
+curl -X GET https://your-zipline-instance.com/api/auth/logout \
+  -H "Cookie: zipline.session=your-session-cookie"
+```
+
+### Example Request (Using API Token)
+
+```bash
+curl -X GET https://your-zipline-instance.com/api/auth/logout \
+  -H "Authorization: your-api-token"
+```
+
+### Example Response
+
+```json
+{
+  "loggedOut": true
+}
+```
+
+### Notes
+
+- This endpoint uses the GET method (not POST)
+- Only destroys the current session, not all user sessions
+- After logout, the user must authenticate again to access protected endpoints
+- The session cookie is cleared in the response

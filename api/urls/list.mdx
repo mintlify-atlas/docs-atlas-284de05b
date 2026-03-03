@@ -1,0 +1,167 @@
+---
+title: 'List URLs'
+description: 'Retrieve all shortened URLs for the authenticated user'
+---
+
+Get a list of all shortened URLs belonging to the authenticated user. You can optionally search for specific URLs.
+
+## Endpoint
+
+```http
+GET /api/user/urls
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Query Parameters
+
+<ParamField query="searchField" type="string" default="destination">
+  Field to search in. Options: `destination`, `vanity`, `code`
+</ParamField>
+
+<ParamField query="searchQuery" type="string">
+  Search query string. When provided, performs a case-insensitive search in the specified field.
+</ParamField>
+
+## Response
+
+Returns an array of URL objects. Passwords are excluded from the response.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the shortened URL
+</ResponseField>
+
+<ResponseField name="code" type="string" required>
+  Random code generated for the URL
+</ResponseField>
+
+<ResponseField name="vanity" type="string | null">
+  Custom vanity string, if set
+</ResponseField>
+
+<ResponseField name="destination" type="string" required>
+  The destination URL that this short URL redirects to
+</ResponseField>
+
+<ResponseField name="views" type="number" required>
+  Number of times this URL has been accessed
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum number of views before the URL is disabled
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean" required>
+  Whether the URL is currently active and will redirect
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the URL was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp of when the URL was last updated
+</ResponseField>
+
+<ResponseField name="userId" type="string | null">
+  ID of the user who created this URL
+</ResponseField>
+
+## Example Request
+
+```bash Get all URLs
+curl -X GET "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token"
+```
+
+```bash Search by destination
+curl -X GET "https://your-zipline-instance.com/api/user/urls?searchField=destination&searchQuery=github" \
+  -H "Authorization: your-api-token"
+```
+
+```bash Search by vanity
+curl -X GET "https://your-zipline-instance.com/api/user/urls?searchField=vanity&searchQuery=docs" \
+  -H "Authorization: your-api-token"
+```
+
+```bash Search by code
+curl -X GET "https://your-zipline-instance.com/api/user/urls?searchField=code&searchQuery=abc" \
+  -H "Authorization: your-api-token"
+```
+
+## Example Response
+
+```json 200 OK
+[
+  {
+    "id": "clx1234567890",
+    "code": "abc123",
+    "vanity": null,
+    "destination": "https://github.com/diced/zipline",
+    "views": 42,
+    "maxViews": null,
+    "enabled": true,
+    "createdAt": "2024-03-01T10:30:00.000Z",
+    "updatedAt": "2024-03-01T10:30:00.000Z",
+    "userId": "user123"
+  },
+  {
+    "id": "clx0987654321",
+    "code": "xyz789",
+    "vanity": "docs",
+    "destination": "https://zipline.diced.sh",
+    "views": 128,
+    "maxViews": 1000,
+    "enabled": true,
+    "createdAt": "2024-02-28T15:20:00.000Z",
+    "updatedAt": "2024-02-28T15:20:00.000Z",
+    "userId": "user123"
+  },
+  {
+    "id": "clx1122334455",
+    "code": "def456",
+    "vanity": null,
+    "destination": "https://example.com/very/long/path/to/resource",
+    "views": 5,
+    "maxViews": 10,
+    "enabled": false,
+    "createdAt": "2024-03-02T08:15:00.000Z",
+    "updatedAt": "2024-03-02T12:30:00.000Z",
+    "userId": "user123"
+  }
+]
+```
+
+```json 200 OK - Search results
+[
+  {
+    "id": "clx1234567890",
+    "code": "abc123",
+    "vanity": null,
+    "destination": "https://github.com/diced/zipline",
+    "views": 42,
+    "maxViews": null,
+    "enabled": true,
+    "createdAt": "2024-03-01T10:30:00.000Z",
+    "updatedAt": "2024-03-01T10:30:00.000Z",
+    "userId": "user123"
+  }
+]
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid authorization token",
+  "statusCode": 401
+}
+```
+
+## Notes
+
+- Password fields are never included in list responses for security
+- Search is case-insensitive and uses partial matching (contains)
+- Empty search results return an empty array, not an error
+- URLs are returned in the order they exist in the database

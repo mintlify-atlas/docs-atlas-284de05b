@@ -1,0 +1,336 @@
+---
+title: Custom Domains
+description: Configure multiple domains and custom upload domains for Zipline
+---
+
+Zipline supports multiple domains, allowing you to serve files from different domains or subdomains. This is useful for branding, organizing uploads, or providing different access URLs.
+
+## How Custom Domains Work
+
+Zipline can serve files from multiple domains simultaneously. When configured:
+
+- Files can be accessed via any configured domain
+- You can set a default domain for new uploads
+- Users can choose which domain to use for their uploads
+- All domains must point to your Zipline instance
+
+## Configuration
+
+### Setting the Default Domain
+
+The default domain is used for generating URLs when uploading files:
+
+```bash
+CORE_DEFAULT_DOMAIN=files.example.com
+```
+
+This domain will be used in:
+- File URLs returned by the API
+- Shortened URLs
+- Email notifications and webhooks
+
+### Configuring Multiple Domains
+
+You can configure additional domains that Zipline will accept requests from:
+
+```bash
+DOMAINS=files.example.com,cdn.example.com,uploads.example.org
+```
+
+<Note>
+  The `DOMAINS` configuration is stored in the database (see `prisma/schema.prisma:149`). You can also manage domains through the admin dashboard after initial setup.
+</Note>
+
+## DNS Configuration
+
+<Steps>
+  <Step title="Add DNS A/AAAA records">
+    For each domain, create DNS records pointing to your server:
+
+    **A Record (IPv4):**
+    ```
+    files.example.com    A    203.0.113.1
+    cdn.example.com      A    203.0.113.1
+    ```
+
+    **AAAA Record (IPv6):**
+    ```
+    files.example.com    AAAA    2001:db8::1
+    cdn.example.com      AAAA    2001:db8::1
+    ```
+  </Step>
+
+  <Step title="Wait for DNS propagation">
+    DNS changes can take up to 48 hours to propagate globally, but usually complete within a few minutes to hours.
+
+    Verify DNS propagation:
+    ```bash
+    nslookup files.example.com
+    nslookup cdn.example.com
+    ```
+  </Step>
+</Steps>
+
+## Reverse Proxy Configuration
+
+Configure your reverse proxy to accept requests from all domains.
+
+### Nginx
+
+```nginx
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    
+    # List all domains
+    server_name files.example.com cdn.example.com uploads.example.org;
+
+    ssl_certificate /etc/ssl/certs/your-cert.crt;
+    ssl_certificate_key /etc/ssl/private/your-key.key;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Caddy
+
+```caddy
+files.example.com, cdn.example.com, uploads.example.org {
+    reverse_proxy localhost:3000
+}
+```
+
+<Tip>
+  Caddy will automatically obtain separate SSL certificates for each domain!
+</Tip>
+
+### Apache
+
+```apache
+<VirtualHost *:443>
+    ServerName files.example.com
+    ServerAlias cdn.example.com uploads.example.org
+
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/your-cert.crt
+    SSLCertificateKeyFile /etc/ssl/private/your-key.key
+
+    ProxyPreserveHost On
+    ProxyPass / http://localhost:3000/
+    ProxyPassReverse / http://localhost:3000/
+</VirtualHost>
+```
+
+## SSL Certificates for Multiple Domains
+
+### Let's Encrypt with Certbot
+
+Obtain a certificate covering all domains:
+
+```bash
+sudo certbot --nginx -d files.example.com -d cdn.example.com -d uploads.example.org
+```
+
+Or for Apache:
+
+```bash
+sudo certbot --apache -d files.example.com -d cdn.example.com -d uploads.example.org
+```
+
+### Caddy (Automatic)
+
+Caddy automatically obtains and manages certificates for all configured domains:
+
+```caddy
+files.example.com, cdn.example.com, uploads.example.org {
+    reverse_proxy localhost:3000
+}
+```
+
+### Cloudflare
+
+If using Cloudflare:
+
+1. Add all domains to your Cloudflare account
+2. Enable SSL/TLS (Full or Full (strict) mode)
+3. Configure DNS records for each domain
+4. Cloudflare automatically provides SSL certificates
+
+## Use Cases
+
+### Separate Upload and CDN Domains
+
+Use different domains for uploads and file delivery:
+
+```bash
+CORE_DEFAULT_DOMAIN=uploads.example.com
+DOMAINS=uploads.example.com,cdn.example.com
+```
+
+- `uploads.example.com` - Admin interface and uploads
+- `cdn.example.com` - Public file access
+
+<Tip>
+  This allows you to apply different caching rules or CDN configurations to your file delivery domain.
+</Tip>
+
+### Multiple Brands/Projects
+
+Use different domains for different projects:
+
+```bash
+DOMAINS=files.project-a.com,files.project-b.com,shared.cdn.com
+```
+
+Users can choose which domain to use when uploading files.
+
+### Regional Domains
+
+Provide region-specific domains:
+
+```bash
+DOMAINS=us.example.com,eu.example.com,asia.example.com
+```
+
+Combine with GeoDNS to route users to the nearest server.
+
+## Managing Domains via Admin Dashboard
+
+After initial setup, you can manage domains through the Zipline admin interface:
+
+1. Log in as an administrator
+2. Navigate to **Settings** → **Server**
+3. Scroll to **Domains** section
+4. Add or remove domains as needed
+5. Click **Save**
+
+<Warning>
+  Ensure DNS and reverse proxy configurations are updated before adding domains in the dashboard, or files may not be accessible.
+</Warning>
+
+## HTTPS URL Generation
+
+When using custom domains with HTTPS:
+
+```bash
+CORE_RETURN_HTTPS_URLS=true
+CORE_DEFAULT_DOMAIN=files.example.com
+CORE_TRUST_PROXY=true
+```
+
+This ensures:
+- File URLs use `https://` instead of `http://`
+- Correct domain is used in generated URLs
+- Proxy headers are respected
+
+## Wildcard Domains
+
+For subdomain-based file serving (e.g., `user1.files.example.com`, `user2.files.example.com`):
+
+### DNS Configuration
+
+Create a wildcard DNS record:
+
+```
+*.files.example.com    A    203.0.113.1
+```
+
+### Reverse Proxy Configuration
+
+**Nginx:**
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name *.files.example.com;
+
+    ssl_certificate /etc/ssl/certs/wildcard-cert.crt;
+    ssl_certificate_key /etc/ssl/private/wildcard-key.key;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**Caddy:**
+```caddy
+*.files.example.com {
+    reverse_proxy localhost:3000
+}
+```
+
+### Wildcard SSL Certificate
+
+**Certbot with DNS challenge:**
+```bash
+sudo certbot certonly --manual --preferred-challenges dns -d "*.files.example.com"
+```
+
+<Note>
+  Wildcard certificates require DNS validation. You'll need to add a TXT record during the challenge.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Files not accessible via new domain">
+    Check:
+    
+    - DNS records point to correct server IP: `nslookup your-domain.com`
+    - Domain is listed in `DOMAINS` configuration or admin dashboard
+    - Reverse proxy accepts requests for the domain
+    - SSL certificate covers the domain
+    - Firewall allows traffic on ports 80/443
+  </Accordion>
+
+  <Accordion title="Wrong domain in file URLs">
+    This happens when `CORE_DEFAULT_DOMAIN` isn't set correctly:
+
+    - Verify `CORE_DEFAULT_DOMAIN` matches your primary domain
+    - Restart Zipline after changing configuration
+    - Clear any cached URLs in ShareX or other clients
+  </Accordion>
+
+  <Accordion title="SSL certificate errors on additional domains">
+    - Ensure SSL certificate covers all domains (use SAN certificate or separate certs)
+    - For Let's Encrypt, include all domains in the `certbot` command
+    - For Caddy, it automatically handles multiple domains
+    - Check certificate details: `openssl s_client -connect domain.com:443 -servername domain.com`
+  </Accordion>
+
+  <Accordion title="Cloudflare 'too many redirects' error">
+    This occurs when Cloudflare SSL mode is misconfigured:
+
+    - Set Cloudflare SSL mode to **Full** or **Full (strict)**
+    - Ensure `CORE_RETURN_HTTPS_URLS=true` is set
+    - Verify reverse proxy doesn't force HTTP redirects
+  </Accordion>
+
+  <Accordion title="Domain works but shows wrong content">
+    - Check reverse proxy `Host` header is being passed: `proxy_set_header Host $host;`
+    - Verify `CORE_TRUST_PROXY=true` is set
+    - Ensure no conflicting server blocks in reverse proxy config
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+- **Use descriptive domains**: `files.example.com`, `cdn.example.com` instead of random subdomains
+- **Plan your structure**: Decide on domain purposes before deploying
+- **Document your setup**: Keep track of which domains serve which purposes
+- **Monitor all domains**: Set up monitoring for all configured domains
+- **Consistent SSL**: Ensure all domains have valid SSL certificates
+- **DNS TTL**: Use reasonable TTL values (e.g., 300-3600 seconds) for easier updates
+
+<Tip>
+  Consider using a CDN like Cloudflare, CloudFront, or BunnyCDN in front of your custom domains for better performance and DDoS protection.
+</Tip>

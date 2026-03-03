@@ -1,0 +1,342 @@
+---
+title: First steps
+description: Configure your Zipline instance and get started with your first upload
+---
+
+After installing Zipline, follow these steps to set up your instance and start uploading files.
+
+## Create your admin account
+
+<Steps>
+  <Step title="Access the registration page">
+    Navigate to your Zipline instance in a web browser:
+
+    ```
+    http://localhost:3000
+    ```
+
+    Or use your configured domain if you've set one up.
+  </Step>
+
+  <Step title="Enable user registration">
+    By default, user registration is disabled. To create the first admin account, you need to temporarily enable it:
+
+    Add to your `.env` file (Docker) or environment:
+
+    ```bash .env
+    FEATURES_USER_REGISTRATION=true
+    ```
+
+    Then restart Zipline:
+
+    <CodeGroup>
+    ```bash Docker
+    docker compose restart zipline
+    ```
+
+    ```bash Source
+    # Stop the server (Ctrl+C) and restart
+    pnpm start
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Register your account">
+    1. Click **Sign up** or navigate to `/auth/register`
+    2. Enter your desired username and password
+    3. Click **Create Account**
+
+    <Tip>
+      The first user created is automatically granted administrator privileges.
+    </Tip>
+  </Step>
+
+  <Step title="Disable public registration">
+    After creating your admin account, disable public registration for security:
+
+    ```bash .env
+    FEATURES_USER_REGISTRATION=false
+    ```
+
+    Restart Zipline again to apply the change.
+
+    <Note>
+      You can create additional users through invites or the admin dashboard.
+    </Note>
+  </Step>
+</Steps>
+
+## Configure basic settings
+
+Once logged in, configure essential settings through the dashboard:
+
+<AccordionGroup>
+  <Accordion title="Upload settings" icon="upload">
+    Navigate to **Settings** → **Uploads** to configure:
+
+    - **File name format**: Choose how uploaded files are named
+      - `random` - Random characters (default)
+      - `date` - Timestamp-based names
+      - `uuid` - UUID v4 format
+      - `name` - Original filename
+      - `gfycat` - Gfycat-style names
+      - `random-words` - Readable random words
+
+    - **File name length**: Number of characters for random names (default: 6)
+    - **Maximum file size**: Set upload size limits
+    - **Disabled extensions**: Block specific file types
+
+    <Info>
+      These settings can also be configured via environment variables. See [environment variables](/config/environment-variables).
+    </Info>
+  </Accordion>
+
+  <Accordion title="Domains" icon="globe">
+    Configure custom domains for file URLs:
+
+    Navigate to **Settings** → **Domains** and add your domains:
+
+    ```
+    https://i.yourdomain.com
+    https://cdn.yourdomain.com
+    ```
+
+    <Warning>
+      Ensure your domains point to your Zipline instance before adding them.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="User settings" icon="user">
+    Customize your personal settings:
+
+    - **Avatar**: Upload a custom avatar
+    - **Theme**: Choose between light, dark, or system theme
+    - **Embed settings**: Configure default embed appearance
+    - **API token**: Generate tokens for API access
+  </Accordion>
+
+  <Accordion title="Security" icon="shield">
+    Enable additional security features:
+
+    - **Two-factor authentication (2FA)**: Add TOTP-based 2FA
+    - **Passkeys**: Register hardware security keys
+    - **OAuth2**: Configure external authentication providers
+
+    See [authentication configuration](/config/authentication) for details.
+  </Accordion>
+</AccordionGroup>
+
+## Your first upload
+
+<Tabs>
+  <Tab title="Web interface">
+    <Steps>
+      <Step title="Navigate to dashboard">
+        From the main dashboard, click **Upload** or drag and drop files anywhere on the page.
+      </Step>
+
+      <Step title="Select files">
+        Choose one or more files from your computer. You can also:
+        - Paste images from clipboard
+        - Take screenshots (using ShareX or similar tools)
+      </Step>
+
+      <Step title="Configure upload options">
+        Before uploading, optionally configure:
+        - **Folder**: Organize uploads into folders
+        - **Password protection**: Require password to access
+        - **Expiration**: Auto-delete after a time period
+        - **Max views**: Delete after X views
+        - **Compression**: Enable image compression
+      </Step>
+
+      <Step title="Upload and share">
+        Click **Upload** and copy the generated URL. The file is now accessible!
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="API / cURL">
+    Upload files using the API:
+
+    <Steps>
+      <Step title="Get your API token">
+        Navigate to **Settings** → **API** and generate a token, or use your username and password.
+      </Step>
+
+      <Step title="Upload with cURL">
+        ```bash
+        curl -X POST http://localhost:3000/api/upload \
+          -H "Authorization: YOUR_TOKEN" \
+          -F "file=@/path/to/image.png"
+        ```
+
+        Response:
+        ```json
+        {
+          "files": ["http://localhost:3000/u/abc123.png"]
+        }
+        ```
+      </Step>
+    </Steps>
+
+    <Info>
+      See the [API reference](/api/upload/file) for complete documentation.
+    </Info>
+  </Tab>
+
+  <Tab title="ShareX">
+    Configure ShareX to upload to your Zipline instance:
+
+    <Steps>
+      <Step title="Export configuration">
+        In Zipline, navigate to **Settings** → **Integrations** → **ShareX** and click **Export Configuration**.
+
+        This downloads a `.sxcu` file preconfigured for your instance.
+      </Step>
+
+      <Step title="Import to ShareX">
+        In ShareX:
+        1. Go to **Destinations** → **Custom uploader settings**
+        2. Click **Import** → **From file**
+        3. Select the downloaded `.sxcu` file
+        4. Set as your default image destination
+      </Step>
+
+      <Step title="Test upload">
+        Take a screenshot with ShareX (default: `Ctrl+Print Screen`). The URL will be automatically copied to your clipboard!
+      </Step>
+    </Steps>
+
+    <Tip>
+      See the [ShareX integration guide](/integrations/sharex) for advanced configuration.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Essential environment variables
+
+Here are the most important environment variables to configure:
+
+<ParamField path="CORE_SECRET" type="string" required>
+  Encryption secret, minimum 32 characters. **Required to start Zipline.**
+
+  ```bash
+  CORE_SECRET="your-32-character-minimum-secret"
+  ```
+</ParamField>
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string.
+
+  ```bash
+  DATABASE_URL="postgresql://user:password@host:5432/database"
+  ```
+</ParamField>
+
+<ParamField path="CORE_PORT" type="number" default="3000">
+  Port for Zipline to listen on.
+
+  ```bash
+  CORE_PORT=3000
+  ```
+</ParamField>
+
+<ParamField path="CORE_HOSTNAME" type="string" default="0.0.0.0">
+  Hostname to bind to.
+
+  ```bash
+  CORE_HOSTNAME=0.0.0.0
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_TYPE" type="string" default="local">
+  Storage backend: `local` or `s3`.
+
+  ```bash
+  DATASOURCE_TYPE=local
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_LOCAL_DIRECTORY" type="string" default="./uploads">
+  Directory for local file storage.
+
+  ```bash
+  DATASOURCE_LOCAL_DIRECTORY=./uploads
+  ```
+</ParamField>
+
+<Info>
+  See the [configuration reference](/config/overview) for all available options.
+</Info>
+
+## Common tasks
+
+### Create additional users
+
+With registration disabled, create users through:
+
+1. **Invites**: Navigate to **Admin** → **Invites** → **Create Invite**
+2. **CLI**: Use `ziplinectl` to create users directly
+   ```bash
+   docker exec -it zipline-zipline-1 ziplinectl user create
+   ```
+
+### Set up reverse proxy
+
+For production deployments, use a reverse proxy (nginx, Caddy, Traefik) with HTTPS:
+
+<CodeGroup>
+```nginx nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    client_max_body_size 100M;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```caddyfile Caddyfile
+your-domain.com {
+    reverse_proxy localhost:3000
+}
+```
+</CodeGroup>
+
+<Warning>
+  When using a reverse proxy, set `CORE_TRUST_PROXY=true` in your environment to properly handle forwarded headers.
+</Warning>
+
+### Enable HTTPS URLs
+
+If you're using HTTPS via a reverse proxy, configure Zipline to return HTTPS URLs:
+
+```bash .env
+CORE_RETURN_HTTPS_URLS=true
+CORE_DEFAULT_DOMAIN=https://your-domain.com
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration guide" icon="gear" href="/config/overview">
+    Explore all configuration options and features
+  </Card>
+  <Card title="ShareX integration" icon="share-nodes" href="/integrations/sharex">
+    Set up ShareX for seamless uploads
+  </Card>
+  <Card title="S3 storage" icon="database" href="/config/datasource">
+    Configure S3-compatible storage
+  </Card>
+  <Card title="API documentation" icon="code" href="/api/introduction">
+    Build integrations with the Zipline API
+  </Card>
+</CardGroup>

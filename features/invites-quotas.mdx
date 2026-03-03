@@ -1,0 +1,450 @@
+---
+title: Invites & Quotas
+description: Control user registration with invite codes and manage storage quotas per user
+---
+
+Zipline provides two powerful features for managing users: **invite codes** for controlling who can register, and **quotas** for limiting storage and resource usage per user.
+
+## Invite Codes
+
+Invite codes allow you to control who can register for your Zipline instance. This is useful for private instances or limiting access to trusted users.
+
+### Configuration
+
+Enable invites in your database configuration:
+
+```prisma
+model Zipline {
+  invitesEnabled Boolean @default(true)
+  invitesLength  Int     @default(6)
+  
+  featuresUserRegistration Boolean @default(false)
+}
+```
+
+- **invitesEnabled**: Enable the invite system
+- **invitesLength**: Length of generated invite codes (default: 6 characters)
+- **featuresUserRegistration**: Allow registration without invite codes
+
+<Note>
+If `featuresUserRegistration` is `false`, users **must** have an invite code to register.
+</Note>
+
+### Invite Code Structure
+
+Invite codes are stored in the database:
+
+```prisma
+model Invite {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expiresAt DateTime?
+  
+  code    String @unique
+  uses    Int    @default(0)
+  maxUses Int?
+  
+  inviter   User   @relation(fields: [inviterId], references: [id])
+  inviterId String
+}
+```
+
+**Fields:**
+- **code**: The unique invite code (e.g., "abc123")
+- **uses**: How many times this code has been used
+- **maxUses**: Maximum number of uses (null = unlimited)
+- **expiresAt**: When the invite expires (null = never)
+- **inviterId**: The user who created this invite
+
+### Creating Invites
+
+Administrators can create invite codes through the admin panel or API:
+
+```bash
+POST /api/invites
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN
+
+{
+  "maxUses": 5,
+  "expiresAt": "2024-12-31T23:59:59Z"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "clx1234567890",
+  "code": "abc123",
+  "uses": 0,
+  "maxUses": 5,
+  "expiresAt": "2024-12-31T23:59:59.000Z",
+  "createdAt": "2024-01-20T10:00:00.000Z"
+}
+```
+
+### Using Invite Codes
+
+When registering, users provide the invite code:
+
+```bash
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "username": "newuser",
+  "password": "securepassword",
+  "code": "abc123"
+}
+```
+
+The registration process validates the invite code at `src/server/routes/api/auth/register.ts:52`:
+
+```typescript
+if (code) {
+  const invite = await prisma.invite.findFirst({
+    where: {
+      OR: [{ id: code }, { code }],
+    },
+  });
+  
+  if (!invite) return res.badRequest('Invalid invite code');
+  
+  // Check expiration
+  if (invite.expiresAt && new Date(invite.expiresAt) < new Date())
+    return res.badRequest('Invalid invite code');
+  
+  // Check usage limit
+  if (invite.maxUses && invite.uses >= invite.maxUses)
+    return res.badRequest('Invalid invite code');
+  
+  // Increment usage counter
+  await prisma.invite.update({
+    where: { id: invite.id },
+    data: { uses: invite.uses + 1 },
+  });
+}
+```
+
+### Invite Links
+
+Users can share invite links:
+
+```
+https://your-domain.com/invite/abc123
+```
+
+This redirects to the registration page with the code pre-filled:
+
+```
+https://your-domain.com/auth/register?code=abc123
+```
+
+## User Quotas
+
+Quotas limit how much storage or how many files/URLs each user can create. This helps manage server resources and prevents abuse.
+
+### Quota Types
+
+Zipline supports three types of file quotas:
+
+<CardGroup cols={3}>
+  <Card title="By Bytes" icon="database">
+    Limit total storage size (e.g., 1GB, 10GB)
+  </Card>
+  <Card title="By Files" icon="file">
+    Limit number of files (e.g., 100 files)
+  </Card>
+  <Card title="No Limit" icon="infinity">
+    No quota restrictions
+  </Card>
+</CardGroup>
+
+Additionally, you can limit the number of shortened URLs per user.
+
+### Database Schema
+
+```prisma
+model UserQuota {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  filesQuota UserFilesQuota  // BY_BYTES or BY_FILES
+  maxBytes   String?         // e.g., "1gb", "500mb"
+  maxFiles   Int?
+  
+  maxUrls Int?
+  
+  User   User?   @relation(fields: [userId], references: [id])
+  userId String? @unique
+}
+
+enum UserFilesQuota {
+  BY_BYTES
+  BY_FILES
+}
+```
+
+### Setting Quotas
+
+Administrators can set quotas for users:
+
+```bash
+PATCH /api/users/:userId
+Content-Type: application/json
+Authorization: Bearer ADMIN_TOKEN
+
+{
+  "quota": {
+    "filesType": "BY_BYTES",
+    "maxBytes": "5gb",
+    "maxUrls": 100
+  }
+}
+```
+
+For file count quotas:
+
+```json
+{
+  "quota": {
+    "filesType": "BY_FILES",
+    "maxFiles": 500,
+    "maxUrls": 50
+  }
+}
+```
+
+To remove quotas:
+
+```json
+{
+  "quota": {
+    "filesType": "NONE"
+  }
+}
+```
+
+### Quota Enforcement
+
+Quotas are checked before file uploads at `src/lib/api/upload.ts:32`:
+
+```typescript
+export async function checkQuota(
+  user: User | null,
+  newSize: number,
+  fileCount: number,
+): Promise<true | string> {
+  if (!user?.quota) return true;
+  
+  // Get current usage
+  const stats = await prisma.file.aggregate({
+    where: { userId: user.id },
+    _sum: { size: true },
+    _count: { _all: true },
+  });
+  
+  const aggSize = stats?._sum?.size ? stats._sum.size : 0n;
+  
+  // Check byte quota
+  if (user.quota.filesQuota === 'BY_BYTES' && 
+      Number(aggSize) + newSize > bytes(user.quota.maxBytes!)) {
+    return `uploading will exceed your storage quota of ${user.quota.maxBytes}`;
+  }
+  
+  // Check file count quota
+  if (user.quota.filesQuota === 'BY_FILES' && 
+      stats?._count?._all + fileCount > user.quota.maxFiles!) {
+    return `uploading will exceed your file count quota of ${user.quota.maxFiles} files`;
+  }
+  
+  return true;
+}
+```
+
+### URL Quotas
+
+URL quotas are checked when shortening URLs:
+
+```typescript
+if (req.user.quota && req.user.quota.maxUrls) {
+  const countUrls = await prisma.url.count({
+    where: { userId: req.user.id },
+  });
+  
+  if (countUrls + 1 > req.user.quota.maxUrls) {
+    return res.forbidden(
+      `Shortening this URL would exceed your quota of ${req.user.quota.maxUrls} URLs.`
+    );
+  }
+}
+```
+
+### Byte Size Formats
+
+Quota sizes support human-readable formats:
+
+- `"100mb"` = 100 megabytes
+- `"1gb"` = 1 gigabyte
+- `"500kb"` = 500 kilobytes
+- `"1tb"` = 1 terabyte
+
+These are parsed using the `bytes` library.
+
+## Admin Management
+
+### Viewing User Quotas
+
+Administrators can view quota usage:
+
+```bash
+GET /api/users/:userId
+Authorization: Bearer ADMIN_TOKEN
+```
+
+**Response:**
+```json
+{
+  "id": "clx1234567890",
+  "username": "john",
+  "role": "USER",
+  "quota": {
+    "filesQuota": "BY_BYTES",
+    "maxBytes": "5gb",
+    "maxFiles": null,
+    "maxUrls": 100
+  },
+  "currentUsage": {
+    "bytes": 2147483648,  // ~2GB
+    "files": 245,
+    "urls": 12
+  }
+}
+```
+
+### Managing Invites
+
+List all invites:
+
+```bash
+GET /api/invites
+Authorization: Bearer ADMIN_TOKEN
+```
+
+Delete an invite:
+
+```bash
+DELETE /api/invites/:inviteId
+Authorization: Bearer ADMIN_TOKEN
+```
+
+## Use Cases
+
+### Private Instance with Invites
+
+```prisma
+invitesEnabled: true
+featuresUserRegistration: false  // Require invites
+```
+
+Create limited-use invites for friends:
+
+```json
+{
+  "maxUses": 1,
+  "expiresAt": "2024-12-31T23:59:59Z"
+}
+```
+
+### Tiered Storage Plans
+
+**Free tier:**
+```json
+{
+  "quota": {
+    "filesType": "BY_BYTES",
+    "maxBytes": "1gb",
+    "maxUrls": 50
+  }
+}
+```
+
+**Premium tier:**
+```json
+{
+  "quota": {
+    "filesType": "BY_BYTES",
+    "maxBytes": "50gb",
+    "maxUrls": 1000
+  }
+}
+```
+
+**Unlimited tier:**
+```json
+{
+  "quota": {
+    "filesType": "NONE"
+  }
+}
+```
+
+### Temporary Access
+
+Create time-limited invites for temporary users:
+
+```json
+{
+  "code": "temp123",
+  "maxUses": 1,
+  "expiresAt": "2024-01-21T00:00:00Z"  // 24 hours
+}
+```
+
+Set temporary quotas:
+
+```json
+{
+  "quota": {
+    "filesType": "BY_FILES",
+    "maxFiles": 10,
+    "maxUrls": 5
+  }
+}
+```
+
+## Best Practices
+
+<Note>
+- **Set reasonable defaults**: Start with conservative quotas and adjust based on usage
+- **Monitor usage**: Regularly review user quota consumption
+- **Communicate limits**: Make quota limits clear to users
+- **Plan for growth**: Design quotas that can scale with your infrastructure
+- **Use expiring invites**: Set expiration dates on invite codes for security
+- **Limit invite uses**: Prevent invite code sharing by setting maxUses
+</Note>
+
+## Troubleshooting
+
+### "Invalid invite code" Error
+
+- Check the code hasn't expired (`expiresAt`)
+- Verify the code hasn't reached max uses
+- Ensure invites are enabled (`invitesEnabled: true`)
+- Confirm the code exists in the database
+
+### Quota Exceeded Errors
+
+- Check current usage with `GET /api/users/:userId`
+- Verify quota settings are correct
+- Ensure quota values are properly formatted ("1gb" not "1GB")
+- Delete old files to free up quota
+
+### User Can't Register
+
+- If `featuresUserRegistration` is `false`, they need an invite code
+- Check that the invite code is valid and not expired
+- Verify invites are enabled in configuration
+- Ensure username isn't already taken

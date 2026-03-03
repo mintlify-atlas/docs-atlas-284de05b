@@ -1,0 +1,501 @@
+---
+title: Security Configuration
+description: Configure rate limiting, proxy trust, webhooks, and other security features
+---
+
+Zipline includes several security features to protect your instance from abuse and ensure safe operation.
+
+## Core Security Settings
+
+### Secret Key
+
+<ParamField path="CORE_SECRET" type="string" required>
+  The master secret key used for session encryption, token generation, and other cryptographic operations.
+  
+  **Requirements:**
+  - Minimum 32 characters
+  - Must not be the default value "changethis"
+  - Should be cryptographically random
+  
+  ```bash
+  # Generate a secure secret
+  CORE_SECRET=$(openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32)
+  ```
+</ParamField>
+
+<Warning>
+  The `CORE_SECRET` is critical for security. If compromised, attackers can:
+  - Forge session tokens
+  - Impersonate users
+  - Access protected resources
+  
+  Never commit this value to version control or share it publicly.
+</Warning>
+
+### Proxy Trust
+
+<ParamField path="CORE_TRUST_PROXY" type="boolean" default="false">
+  Trust proxy headers for client IP address detection.
+  
+  ```bash
+  CORE_TRUST_PROXY=true
+  ```
+</ParamField>
+
+Enable this when Zipline is behind a reverse proxy (Nginx, Apache, Cloudflare, etc.) to:
+
+- Correctly identify client IP addresses from `X-Forwarded-For` header
+- Respect `X-Forwarded-Proto` for HTTPS detection
+- Enable accurate rate limiting by IP
+- Properly log client addresses
+
+<Note>
+  **When to enable:**
+  - Behind Nginx, Apache, Caddy, or similar reverse proxy
+  - Using Cloudflare or other CDN
+  - In containerized environments with ingress controllers
+  
+  **When to keep disabled:**
+  - Direct exposure to the internet
+  - When you don't have a trusted proxy layer
+</Note>
+
+#### Reverse Proxy Configuration Examples
+
+<AccordionGroup>
+  <Accordion title="Nginx" icon="server">
+    ```nginx
+    location / {
+      proxy_pass http://localhost:3000;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    ```
+    
+    Set `CORE_TRUST_PROXY=true` in Zipline.
+  </Accordion>
+  
+  <Accordion title="Caddy" icon="server">
+    ```caddyfile
+    zipline.example.com {
+      reverse_proxy localhost:3000
+    }
+    ```
+    
+    Caddy automatically sets proper headers. Set `CORE_TRUST_PROXY=true`.
+  </Accordion>
+  
+  <Accordion title="Apache" icon="server">
+    ```apache
+    <VirtualHost *:443>
+      ServerName zipline.example.com
+      
+      ProxyPreserveHost On
+      ProxyPass / http://localhost:3000/
+      ProxyPassReverse / http://localhost:3000/
+      
+      RequestHeader set X-Forwarded-Proto "https"
+    </VirtualHost>
+    ```
+    
+    Set `CORE_TRUST_PROXY=true` in Zipline.
+  </Accordion>
+</AccordionGroup>
+
+## Rate Limiting
+
+Protect your instance from abuse with built-in rate limiting.
+
+<ParamField path="RATELIMIT_ENABLED" type="boolean" default="true">
+  Enable rate limiting globally.
+  
+  ```bash
+  RATELIMIT_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="RATELIMIT_MAX" type="number" default="10">
+  Maximum number of requests allowed per window.
+  
+  ```bash
+  RATELIMIT_MAX=10
+  ```
+</ParamField>
+
+<ParamField path="RATELIMIT_WINDOW" type="number" default="null">
+  Time window in milliseconds. If not set, uses a default window.
+  
+  ```bash
+  RATELIMIT_WINDOW=60000  # 1 minute
+  ```
+</ParamField>
+
+<ParamField path="RATELIMIT_ADMIN_BYPASS" type="boolean" default="true">
+  Allow administrators to bypass rate limits.
+  
+  ```bash
+  RATELIMIT_ADMIN_BYPASS=true
+  ```
+</ParamField>
+
+<ParamField path="RATELIMIT_ALLOW_LIST" type="string[]" default="[]">
+  Comma-separated list of IP addresses or CIDR ranges exempt from rate limiting.
+  
+  ```bash
+  RATELIMIT_ALLOW_LIST=127.0.0.1,192.168.1.0/24,10.0.0.5
+  ```
+</ParamField>
+
+### Rate Limit Examples
+
+<CodeGroup>
+```bash Strict
+# 5 requests per minute
+RATELIMIT_ENABLED=true
+RATELIMIT_MAX=5
+RATELIMIT_WINDOW=60000
+RATELIMIT_ADMIN_BYPASS=true
+```
+
+```bash Moderate
+# 20 requests per 5 minutes
+RATELIMIT_ENABLED=true
+RATELIMIT_MAX=20
+RATELIMIT_WINDOW=300000
+RATELIMIT_ADMIN_BYPASS=true
+```
+
+```bash Relaxed
+# 100 requests per 10 minutes
+RATELIMIT_ENABLED=true
+RATELIMIT_MAX=100
+RATELIMIT_WINDOW=600000
+RATELIMIT_ADMIN_BYPASS=true
+```
+
+```bash Allow List
+# Exempt internal network and specific IPs
+RATELIMIT_ENABLED=true
+RATELIMIT_MAX=10
+RATELIMIT_WINDOW=60000
+RATELIMIT_ALLOW_LIST=192.168.0.0/16,10.0.0.100
+```
+</CodeGroup>
+
+<Note>
+  Rate limiting is applied per IP address. With `CORE_TRUST_PROXY=true`, the client's real IP from proxy headers is used.
+</Note>
+
+## File Security
+
+### Extension Blocking
+
+<ParamField path="FILES_DISABLED_EXTENSIONS" type="string[]" default="[]">
+  Block uploads of files with specific extensions.
+  
+  ```bash
+  FILES_DISABLED_EXTENSIONS=exe,bat,cmd,sh,ps1
+  ```
+</ParamField>
+
+Common security-focused configurations:
+
+```bash
+# Block executables
+FILES_DISABLED_EXTENSIONS=exe,bat,cmd,com,msi,scr
+
+# Block scripts
+FILES_DISABLED_EXTENSIONS=sh,bash,ps1,vbs,js,jar
+
+# Block potentially dangerous files
+FILES_DISABLED_EXTENSIONS=exe,dll,bat,cmd,sh,ps1,vbs,com,scr,pif,msi
+```
+
+### Metadata Removal
+
+<ParamField path="FILES_REMOVE_GPS_METADATA" type="boolean" default="false">
+  Automatically strip GPS and location metadata from uploaded images.
+  
+  ```bash
+  FILES_REMOVE_GPS_METADATA=true
+  ```
+</ParamField>
+
+When enabled, removes EXIF data including:
+- GPS coordinates
+- Location names
+- Timestamps
+- Camera information
+
+<Note>
+  Protecting user privacy by removing location data from photos is recommended for public instances.
+</Note>
+
+### File Size Limits
+
+<ParamField path="FILES_MAX_FILE_SIZE" type="string" default="100mb">
+  Maximum allowed file size for uploads.
+  
+  ```bash
+  FILES_MAX_FILE_SIZE=500mb
+  ```
+</ParamField>
+
+Considerations:
+- Prevents storage exhaustion attacks
+- Limits bandwidth consumption
+- Affects server memory usage during uploads
+
+## Webhooks
+
+Webhooks can notify external services when events occur, but should be configured carefully.
+
+### HTTP Webhooks
+
+<ParamField path="HTTP_WEBHOOK_ON_UPLOAD" type="string" default="null">
+  URL to POST to when a file is uploaded.
+  
+  ```bash
+  HTTP_WEBHOOK_ON_UPLOAD=https://api.example.com/webhooks/upload
+  ```
+</ParamField>
+
+<ParamField path="HTTP_WEBHOOK_ON_SHORTEN" type="string" default="null">
+  URL to POST to when a URL is shortened.
+  
+  ```bash
+  HTTP_WEBHOOK_ON_SHORTEN=https://api.example.com/webhooks/shorten
+  ```
+</ParamField>
+
+Webhook payload includes:
+- File/URL metadata
+- User information
+- Timestamp
+- File URL
+
+### Discord Webhooks
+
+<ParamField path="DISCORD_WEBHOOK_URL" type="string" default="null">
+  Global Discord webhook URL.
+  
+  ```bash
+  DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/abcdefg
+  ```
+</ParamField>
+
+<ParamField path="DISCORD_USERNAME" type="string" default="null">
+  Username for Discord webhook messages.
+  
+  ```bash
+  DISCORD_USERNAME=Zipline Bot
+  ```
+</ParamField>
+
+<ParamField path="DISCORD_AVATAR_URL" type="string" default="null">
+  Avatar URL for Discord webhook messages.
+  
+  ```bash
+  DISCORD_AVATAR_URL=https://zipline.example.com/logo.png
+  ```
+</ParamField>
+
+#### Upload-Specific Discord Webhook
+
+<ParamField path="DISCORD_ON_UPLOAD_WEBHOOK_URL" type="string" default="null">
+  Separate webhook URL specifically for file uploads.
+</ParamField>
+
+<ParamField path="DISCORD_ON_UPLOAD_USERNAME" type="string" default="null">
+  Username for upload notifications.
+</ParamField>
+
+<ParamField path="DISCORD_ON_UPLOAD_AVATAR_URL" type="string" default="null">
+  Avatar URL for upload notifications.
+</ParamField>
+
+<ParamField path="DISCORD_ON_UPLOAD_CONTENT" type="string" default="null">
+  Message content for upload notifications.
+</ParamField>
+
+<ParamField path="DISCORD_ON_UPLOAD_EMBED" type="json" default="null">
+  JSON configuration for Discord embed on uploads.
+  
+  ```bash
+  DISCORD_ON_UPLOAD_EMBED='{"title":"New Upload","color":"#5865F2"}'
+  ```
+</ParamField>
+
+#### URL Shorten-Specific Discord Webhook
+
+<ParamField path="DISCORD_ON_SHORTEN_WEBHOOK_URL" type="string" default="null">
+  Separate webhook URL specifically for URL shortening.
+</ParamField>
+
+<ParamField path="DISCORD_ON_SHORTEN_USERNAME" type="string" default="null">
+  Username for shorten notifications.
+</ParamField>
+
+<ParamField path="DISCORD_ON_SHORTEN_AVATAR_URL" type="string" default="null">
+  Avatar URL for shorten notifications.
+</ParamField>
+
+<ParamField path="DISCORD_ON_SHORTEN_CONTENT" type="string" default="null">
+  Message content for shorten notifications.
+</ParamField>
+
+<ParamField path="DISCORD_ON_SHORTEN_EMBED" type="json" default="null">
+  JSON configuration for Discord embed on URL shortening.
+</ParamField>
+
+<Warning>
+  **Webhook Security:**
+  - Webhook URLs contain secrets - keep them private
+  - Don't expose sensitive user data in webhook payloads
+  - Use HTTPS endpoints only
+  - Validate webhook destination is trusted
+  - Monitor webhook activity for abuse
+</Warning>
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Production Deployment" icon="shield-check">
+    ```bash
+    # Strong secret (32+ characters)
+    CORE_SECRET=$(openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32)
+    
+    # Trust proxy when behind reverse proxy
+    CORE_TRUST_PROXY=true
+    
+    # Return HTTPS URLs
+    CORE_RETURN_HTTPS_URLS=true
+    
+    # Enable rate limiting
+    RATELIMIT_ENABLED=true
+    RATELIMIT_MAX=20
+    RATELIMIT_WINDOW=60000
+    
+    # Remove GPS metadata
+    FILES_REMOVE_GPS_METADATA=true
+    
+    # Disable public registration
+    FEATURES_USER_REGISTRATION=false
+    ```
+  </Accordion>
+  
+  <Accordion title="Private Instance" icon="lock">
+    ```bash
+    # Strict rate limiting
+    RATELIMIT_ENABLED=true
+    RATELIMIT_MAX=10
+    RATELIMIT_WINDOW=60000
+    
+    # Invite-only access
+    FEATURES_USER_REGISTRATION=false
+    FEATURES_OAUTH_REGISTRATION=false
+    INVITES_ENABLED=true
+    
+    # Block executables
+    FILES_DISABLED_EXTENSIONS=exe,bat,cmd,sh,ps1
+    ```
+  </Accordion>
+  
+  <Accordion title="Public Instance" icon="globe">
+    ```bash
+    # Moderate rate limiting
+    RATELIMIT_ENABLED=true
+    RATELIMIT_MAX=30
+    RATELIMIT_WINDOW=60000
+    
+    # Allow registration with safeguards
+    FEATURES_USER_REGISTRATION=true
+    
+    # Privacy protection
+    FILES_REMOVE_GPS_METADATA=true
+    
+    # File restrictions
+    FILES_MAX_FILE_SIZE=100mb
+    FILES_DISABLED_EXTENSIONS=exe,dll,bat,cmd,sh,scr
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Additional Security Features
+
+### HTTPS Enforcement
+
+<ParamField path="CORE_RETURN_HTTPS_URLS" type="boolean" default="false">
+  Generate HTTPS URLs instead of HTTP.
+  
+  ```bash
+  CORE_RETURN_HTTPS_URLS=true
+  ```
+</ParamField>
+
+Always enable this in production when using HTTPS.
+
+### Password Protection
+
+Users can password-protect individual files and URLs. Passwords are hashed using bcrypt before storage.
+
+### View Limits
+
+<ParamField path="FEATURES_DELETE_ON_MAX_VIEWS" type="boolean" default="true">
+  Automatically delete files when they reach their maximum view count.
+  
+  ```bash
+  FEATURES_DELETE_ON_MAX_VIEWS=true
+  ```
+</ParamField>
+
+Useful for:
+- Self-destructing file shares
+- One-time secret sharing
+- Controlling content distribution
+
+## Monitoring and Logging
+
+Enable logging to monitor security events:
+
+```bash
+DEBUG=zipline
+```
+
+Logs include:
+- Authentication attempts
+- Rate limit violations
+- File upload/download activity
+- Configuration validation errors
+- Datasource access issues
+
+## Troubleshooting
+
+### Rate Limiting Issues
+
+**Users getting rate limited incorrectly:**
+- Check `CORE_TRUST_PROXY` is enabled if behind proxy
+- Verify proxy is setting `X-Forwarded-For` header
+- Add internal IPs to `RATELIMIT_ALLOW_LIST`
+
+**Rate limits not working:**
+- Ensure `RATELIMIT_ENABLED=true`
+- Check window value is reasonable
+- Verify IP detection is working (check logs)
+
+### Proxy Issues
+
+**Wrong IP addresses in logs:**
+- Enable `CORE_TRUST_PROXY=true`
+- Verify proxy headers are being sent
+
+**Rate limiting by proxy IP:**
+- Same as above - trust proxy configuration needed
+
+## Next Steps
+
+<Card title="Authentication Configuration" icon="lock" href="/config/authentication">
+  OAuth, MFA, and user registration settings
+</Card>

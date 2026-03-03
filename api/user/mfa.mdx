@@ -1,0 +1,298 @@
+---
+title: Multi-Factor Authentication
+description: Manage TOTP (authenticator apps) and passkey authentication for your account
+---
+
+## TOTP (Time-based One-Time Password)
+
+TOTP provides two-factor authentication using authenticator apps like Google Authenticator, Authy, or 1Password.
+
+<Warning>
+  TOTP must be enabled by the server administrator. If disabled, these endpoints will return 400 Bad Request.
+</Warning>
+
+### Get TOTP Status
+
+<Card title="GET /api/user/mfa/totp" icon="mobile">
+  Check if TOTP is enabled and generate setup credentials if needed.
+</Card>
+
+#### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user/mfa/totp \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+#### Response (TOTP Not Enabled)
+
+If you haven't set up TOTP yet:
+
+<ResponseField name="secret" type="string">
+  Base32-encoded secret key to enter manually
+</ResponseField>
+
+<ResponseField name="qrcode" type="string">
+  Data URL containing QR code image for scanning
+</ResponseField>
+
+```json Example Response
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "qrcode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg..."
+}
+```
+
+#### Response (TOTP Already Enabled)
+
+If TOTP is already configured:
+
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP"
+}
+```
+
+### Enable TOTP
+
+<Card title="POST /api/user/mfa/totp" icon="circle-check">
+  Verify and activate TOTP authentication.
+</Card>
+
+#### Request
+
+<ParamField body="code" type="string" required>
+  6-digit verification code from your authenticator app
+</ParamField>
+
+<ParamField body="secret" type="string" required>
+  The secret key returned from GET `/api/user/mfa/totp`
+</ParamField>
+
+```bash
+curl -X POST https://your-zipline.com/api/user/mfa/totp \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "123456",
+    "secret": "JBSWY3DPEHPK3PXP"
+  }'
+```
+
+#### Response
+
+Returns the updated user object with TOTP enabled.
+
+#### Errors
+
+- **400 Bad Request**: Invalid verification code or TOTP disabled on server
+
+### Disable TOTP
+
+<Card title="DELETE /api/user/mfa/totp" icon="circle-xmark">
+  Remove TOTP authentication from your account.
+</Card>
+
+#### Request
+
+<ParamField body="code" type="string" required>
+  Current 6-digit TOTP code to confirm removal
+</ParamField>
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/mfa/totp \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "123456"
+  }'
+```
+
+#### Response
+
+Returns the updated user object with TOTP disabled.
+
+#### Errors
+
+- **400 Bad Request**: Invalid code, TOTP not enabled, or TOTP disabled on server
+
+---
+
+## Passkeys (WebAuthn)
+
+Passkeys provide passwordless authentication using biometrics, security keys, or device authentication.
+
+<Warning>
+  Passkeys must be enabled and configured by the server administrator (requires RP ID and Origin). If disabled or misconfigured, these endpoints will return 404 Not Found.
+</Warning>
+
+### List Passkeys
+
+<Card title="GET /api/user/mfa/passkey" icon="key">
+  Get all registered passkeys for your account.
+</Card>
+
+#### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user/mfa/passkey \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+#### Response
+
+Returns an array of passkey objects (without sensitive registration data).
+
+```json Example Response
+[
+  {
+    "id": "pk_abc123",
+    "createdAt": "2024-03-10T14:22:00.000Z",
+    "updatedAt": "2024-03-15T09:30:00.000Z",
+    "lastUsed": "2024-03-15T09:30:00.000Z",
+    "name": "YubiKey 5C",
+    "userId": "clxxx123456789"
+  },
+  {
+    "id": "pk_def456",
+    "createdAt": "2024-02-18T11:45:00.000Z",
+    "updatedAt": "2024-03-14T16:20:00.000Z",
+    "lastUsed": "2024-03-14T16:20:00.000Z",
+    "name": "MacBook Touch ID",
+    "userId": "clxxx123456789"
+  }
+]
+```
+
+### Get Registration Options
+
+<Card title="GET /api/user/mfa/passkey/options" icon="gear">
+  Generate WebAuthn registration options for creating a new passkey.
+</Card>
+
+#### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user/mfa/passkey/options \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+#### Response
+
+Returns WebAuthn `PublicKeyCredentialCreationOptions` for the browser's `navigator.credentials.create()` API.
+
+```json Example Response
+{
+  "rp": {
+    "name": "Zipline",
+    "id": "zipline.example.com"
+  },
+  "user": {
+    "id": "Y2x4eHgxMjM0NTY3ODk=",
+    "name": "john_doe",
+    "displayName": "john_doe"
+  },
+  "challenge": "random-challenge-string",
+  "pubKeyCredParams": [
+    { "type": "public-key", "alg": -7 },
+    { "type": "public-key", "alg": -257 }
+  ],
+  "timeout": 60000,
+  "excludeCredentials": [],
+  "authenticatorSelection": {
+    "userVerification": "preferred",
+    "residentKey": "preferred"
+  }
+}
+```
+
+<Note>
+  Registration options are cached for 3 minutes. Requesting options again within this period returns the same challenge.
+</Note>
+
+#### Rate Limiting
+
+This endpoint is rate-limited to **1 request per second**.
+
+### Register Passkey
+
+<Card title="POST /api/user/mfa/passkey" icon="plus">
+  Complete passkey registration with the WebAuthn credential.
+</Card>
+
+#### Request
+
+<ParamField body="response" type="object" required>
+  WebAuthn `RegistrationResponseJSON` from `navigator.credentials.create()`
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Friendly name for this passkey (e.g., "YubiKey 5C", "iPhone 15")
+</ParamField>
+
+```bash
+curl -X POST https://your-zipline.com/api/user/mfa/passkey \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "YubiKey 5C",
+    "response": {
+      "id": "credential-id",
+      "rawId": "credential-id",
+      "type": "public-key",
+      "response": {
+        "clientDataJSON": "...",
+        "attestationObject": "..."
+      }
+    }
+  }'
+```
+
+#### Response
+
+Returns the updated user object.
+
+#### Errors
+
+- **400 Bad Request**: Invalid registration response, expired challenge, or verification failed
+- **429 Too Many Requests**: Rate limit exceeded (1 request per second)
+
+### Delete Passkey
+
+<Card title="DELETE /api/user/mfa/passkey" icon="trash">
+  Remove a registered passkey from your account.
+</Card>
+
+#### Request
+
+<ParamField body="id" type="string" required>
+  ID of the passkey to delete
+</ParamField>
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/mfa/passkey \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "pk_abc123"
+  }'
+```
+
+#### Response
+
+Returns the updated user object.
+
+---
+
+## Security Best Practices
+
+<Tip>
+  - **Use TOTP and passkeys together** for defense in depth
+  - **Register multiple passkeys** as backups in case you lose a device
+  - **Name your passkeys clearly** to identify them later (e.g., "Work YubiKey", "Personal iPhone")
+  - **Review active sessions** regularly in `/api/user/sessions`
+</Tip>
+
+<Warning>
+  If you lose access to all MFA methods and are locked out, contact your server administrator for account recovery.
+</Warning>

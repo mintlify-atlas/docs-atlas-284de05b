@@ -1,0 +1,332 @@
+---
+title: User Management
+description: Admin endpoints for creating, viewing, updating, and deleting users
+---
+
+<Warning>
+  **Authentication Required**: These endpoints require `ADMIN` or `SUPERADMIN` role.
+</Warning>
+
+## List Users
+
+<Card title="GET /api/users" icon="users">
+  Get a list of all users in the system.
+</Card>
+
+### Request
+
+<ParamField query="noincl" type="boolean" default="false">
+  Exclude the requesting admin user from the results
+</ParamField>
+
+```bash
+curl -X GET https://your-zipline.com/api/users \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+```bash Get users excluding yourself
+curl -X GET "https://your-zipline.com/api/users?noincl=true" \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+### Response
+
+Returns an array of user objects.
+
+```json Example Response
+[
+  {
+    "id": "clxxx123456789",
+    "username": "john_doe",
+    "role": "USER",
+    "avatar": null,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "quota": null
+  },
+  {
+    "id": "clxxx987654321",
+    "username": "jane_admin",
+    "role": "ADMIN",
+    "avatar": "data:image/png;base64,...",
+    "createdAt": "2024-01-10T08:15:00.000Z",
+    "quota": {
+      "filesQuota": "BY_BYTES",
+      "maxBytes": "50gb",
+      "maxFiles": null,
+      "maxUrls": 100
+    }
+  }
+]
+```
+
+---
+
+## Create User
+
+<Card title="POST /api/users" icon="user-plus">
+  Create a new user account. Optionally set their role and avatar.
+</Card>
+
+### Request
+
+<ParamField body="username" type="string" required>
+  Unique username for the new user
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password for the new user (will be hashed)
+</ParamField>
+
+<ParamField body="avatar" type="string" optional>
+  Base64-encoded image or URL for user avatar. Falls back to server default avatar if not provided.
+</ParamField>
+
+<ParamField body="role" type="string" default="USER">
+  User role: `USER`, `ADMIN`, or `SUPERADMIN`
+  
+  <Warning>
+    You can only create users with roles lower than or equal to your own role.
+  </Warning>
+</ParamField>
+
+<ParamField query="noincl" type="boolean" default="false">
+  Same as GET endpoint - affects response format
+</ParamField>
+
+```bash
+curl -X POST https://your-zipline.com/api/users \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "securePassword123",
+    "role": "USER"
+  }'
+```
+
+### Response
+
+Returns the created user object.
+
+```json Example Response
+{
+  "id": "clyyy111222333",
+  "username": "newuser",
+  "role": "USER",
+  "avatar": "data:image/png;base64,...",
+  "createdAt": "2024-03-15T12:00:00.000Z",
+  "quota": null
+}
+```
+
+### Errors
+
+- **400 Bad Request**: Username already exists
+- **403 Forbidden**: Attempting to create a role higher than your own
+- **429 Too Many Requests**: Rate limit exceeded (1 request per second)
+
+### Rate Limiting
+
+This endpoint is rate-limited to **1 request per second**.
+
+---
+
+## Get User
+
+<Card title="GET /api/users/:id" icon="user">
+  Retrieve detailed information about a specific user.
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/users/clxxx123456789 \
+  -H "Authorization: YOUR_ADMIN_TOKEN"
+```
+
+### Response
+
+```json Example Response
+{
+  "id": "clxxx123456789",
+  "username": "john_doe",
+  "role": "USER",
+  "avatar": null,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-03-10T14:20:00.000Z",
+  "view": {
+    "enabled": true,
+    "embedColor": "#3b82f6"
+  },
+  "quota": {
+    "id": "clqqq111222333",
+    "filesQuota": "BY_BYTES",
+    "maxBytes": "10gb",
+    "maxFiles": null,
+    "maxUrls": 50
+  }
+}
+```
+
+### Errors
+
+- **404 Not Found**: User not found
+
+---
+
+## Update User
+
+<Card title="PATCH /api/users/:id" icon="pen">
+  Update user profile, role, password, or quota settings.
+</Card>
+
+### Request
+
+<ParamField body="username" type="string" optional>
+  New username (must be unique)
+</ParamField>
+
+<ParamField body="password" type="string" optional>
+  New password (will be hashed)
+</ParamField>
+
+<ParamField body="avatar" type="string" optional>
+  New avatar URL
+</ParamField>
+
+<ParamField body="role" type="string" optional>
+  New role: `USER`, `ADMIN`, or `SUPERADMIN`
+  
+  <Warning>
+    You can only assign roles lower than or equal to your own role.
+  </Warning>
+</ParamField>
+
+<ParamField body="quota" type="object" optional>
+  User quota configuration
+  
+  <Expandable title="properties">
+    <ParamField body="filesType" type="string" optional>
+      Quota type: `BY_BYTES`, `BY_FILES`, or `NONE`
+    </ParamField>
+    
+    <ParamField body="maxBytes" type="string" optional>
+      Maximum storage (e.g., "10gb", "500mb"). Required if `filesType` is `BY_BYTES`.
+    </ParamField>
+    
+    <ParamField body="maxFiles" type="number" optional>
+      Maximum number of files (min: 1). Required if `filesType` is `BY_FILES`.
+    </ParamField>
+    
+    <ParamField body="maxUrls" type="number" optional>
+      Maximum number of shortened URLs (min: 1). Set to `null` for unlimited.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```bash Update role and quota
+curl -X PATCH https://your-zipline.com/api/users/clxxx123456789 \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "role": "ADMIN",
+    "quota": {
+      "filesType": "BY_BYTES",
+      "maxBytes": "50gb",
+      "maxUrls": 200
+    }
+  }'
+```
+
+```bash Remove quota limits
+curl -X PATCH https://your-zipline.com/api/users/clxxx123456789 \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "quota": {
+      "filesType": "NONE"
+    }
+  }'
+```
+
+### Response
+
+Returns the updated user object.
+
+### Errors
+
+- **400 Bad Request**: Invalid quota configuration (e.g., `BY_BYTES` without `maxBytes`)
+- **403 Forbidden**: Attempting to assign a role higher than your own
+- **404 Not Found**: User not found
+
+---
+
+## Delete User
+
+<Card title="DELETE /api/users/:id" icon="trash">
+  Delete a user account. Optionally delete all their files and URLs.
+</Card>
+
+### Request
+
+<ParamField body="delete" type="boolean" default="false">
+  If `true`, also deletes all files and URLs owned by the user from storage. If `false`, only the user account is deleted (files/URLs become orphaned).
+</ParamField>
+
+```bash Delete user only
+curl -X DELETE https://your-zipline.com/api/users/clxxx123456789 \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": false
+  }'
+```
+
+```bash Delete user and all their content
+curl -X DELETE https://your-zipline.com/api/users/clxxx123456789 \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": true
+  }'
+```
+
+### Response
+
+Returns the deleted user object.
+
+```json Example Response
+{
+  "id": "clxxx123456789",
+  "username": "john_doe",
+  "role": "USER",
+  "avatar": null,
+  "createdAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### Errors
+
+- **403 Forbidden**: 
+  - Attempting to delete yourself
+  - Attempting to delete a user with a role equal to or higher than yours
+- **404 Not Found**: User not found
+
+<Warning>
+  **Deletion is permanent and cannot be undone.** When `delete: true` is set, all files are removed from the datasource (S3, local storage, etc.).
+</Warning>
+
+---
+
+## Role Hierarchy
+
+The role system enforces a hierarchy:
+
+- **SUPERADMIN**: Can manage all users including other admins
+- **ADMIN**: Can manage users with `USER` role only
+- **USER**: Cannot access these endpoints
+
+You cannot:
+- Create or assign roles higher than your own
+- Modify or delete users with roles equal to or higher than yours
+- Delete your own account through this endpoint

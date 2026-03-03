@@ -1,0 +1,270 @@
+---
+title: Upload Text/Shorten URL
+description: Create short URLs and text snippets
+---
+
+Create shortened URLs or upload text content. This endpoint is part of Zipline's URL shortening feature.
+
+## Endpoint
+
+```
+POST /api/user/urls
+```
+
+## Authentication
+
+Requires authentication via Bearer token in the `Authorization` header.
+
+```
+Authorization: Bearer <your-token>
+```
+
+## Request
+
+### JSON Body
+
+<ParamField body="destination" type="string" required>
+  The destination URL to shorten or redirect to.
+  
+  ```json
+  {
+    "destination": "https://example.com/very/long/url/path"
+  }
+  ```
+</ParamField>
+
+<ParamField body="vanity" type="string">
+  Custom vanity path for the shortened URL (max 100 characters). Must be unique.
+  
+  ```json
+  {
+    "vanity": "my-link"
+  }
+  ```
+  
+  <Note>
+    If vanity is already taken, the request will fail with a 400 error.
+  </Note>
+</ParamField>
+
+<ParamField body="enabled" type="boolean" default="true">
+  Whether the shortened URL is immediately active.
+  
+  ```json
+  {
+    "enabled": false
+  }
+  ```
+</ParamField>
+
+### Headers
+
+<ParamField header="X-Zipline-Max-Views" type="number">
+  Maximum number of times the URL can be accessed before it's disabled.
+  
+  ```bash
+  X-Zipline-Max-Views: 100
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Password" type="string">
+  Protect the URL with a password. Users must enter this password before being redirected.
+  
+  ```bash
+  X-Zipline-Password: secret123
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Domain" type="string">
+  Override the return domain. Supports multiple domains separated by commas (randomly selected).
+  
+  ```bash
+  X-Zipline-Domain: short.example.com,links.example.com
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-No-Json" type="boolean" default="false">
+  Return plain text URL instead of JSON response.
+  
+  ```bash
+  X-Zipline-No-Json: true
+  ```
+</ParamField>
+
+## Response
+
+### JSON Response (default)
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the shortened URL.
+</ResponseField>
+
+<ResponseField name="code" type="string" required>
+  Generated short code for the URL.
+</ResponseField>
+
+<ResponseField name="vanity" type="string">
+  Custom vanity path if provided.
+</ResponseField>
+
+<ResponseField name="destination" type="string" required>
+  The destination URL.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  ID of the user who created the URL.
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean" required>
+  Whether the URL is currently active.
+</ResponseField>
+
+<ResponseField name="maxViews" type="number">
+  Maximum views limit if set.
+</ResponseField>
+
+<ResponseField name="views" type="number" required>
+  Current number of views.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of creation.
+</ResponseField>
+
+<ResponseField name="url" type="string" required>
+  Full shortened URL.
+</ResponseField>
+
+### Plain Text Response
+
+When `X-Zipline-No-Json: true` is set, returns the shortened URL directly:
+
+```
+https://short.example.com/abc123
+```
+
+## Examples
+
+### Basic URL Shortening
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://example.com/very/long/url/path"
+  }'
+```
+
+### Vanity URL
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://github.com/user/repo",
+    "vanity": "my-repo"
+  }'
+```
+
+### Password Protected URL
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-Zipline-Password: secret123" \
+  -d '{
+    "destination": "https://private-docs.example.com"
+  }'
+```
+
+### Limited Views URL
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-Zipline-Max-Views: 10" \
+  -d '{
+    "destination": "https://one-time-link.example.com"
+  }'
+```
+
+### Plain Text Response
+
+```bash
+curl -X POST https://your-zipline.com/api/user/urls \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-Zipline-No-Json: true" \
+  -d '{
+    "destination": "https://example.com"
+  }'
+```
+
+## Response Example
+
+```json
+{
+  "id": "clx7g8kj30001abc123xyz",
+  "code": "a8c3e9f2",
+  "vanity": null,
+  "destination": "https://example.com/very/long/url/path",
+  "userId": "clx7a1kj30001xyz789abc",
+  "enabled": true,
+  "maxViews": null,
+  "views": 0,
+  "createdAt": "2024-03-03T12:00:00.000Z",
+  "url": "https://short.example.com/a8c3e9f2"
+}
+```
+
+## Search URLs
+
+You can also retrieve your shortened URLs:
+
+```bash
+GET /api/user/urls?searchField=destination&searchQuery=example
+```
+
+### Query Parameters
+
+<ParamField query="searchField" type="string" default="destination">
+  Field to search: `destination`, `vanity`, or `code`.
+</ParamField>
+
+<ParamField query="searchQuery" type="string">
+  Search term (case-insensitive, partial match).
+</ParamField>
+
+## Error Responses
+
+### 400 Bad Request
+
+- Missing `destination` field
+- Vanity path already taken
+- Invalid request body
+
+### 403 Forbidden
+
+- Creating URL would exceed user quota limit
+
+## Notes
+
+<Note>
+  The length of the generated short code is configured by the server's `urls.length` setting.
+</Note>
+
+<Note>
+  If you have a user quota configured, creating URLs counts towards your `maxUrls` limit.
+</Note>
+
+<Note>
+  URLs with `enabled: false` return a 404 when accessed until you enable them.
+</Note>
+
+<Warning>
+  Vanity paths must be unique across all users. Choose carefully!
+</Warning>

@@ -1,0 +1,289 @@
+---
+title: S3 Storage Setup
+description: Configure Zipline to use S3-compatible storage for file uploads
+---
+
+Zipline supports S3-compatible object storage as an alternative to local file storage. This guide covers setup for AWS S3, MinIO, Backblaze B2, and other S3-compatible providers.
+
+## Prerequisites
+
+- An S3-compatible storage bucket
+- Access credentials (access key ID and secret access key)
+- Bucket name and region information
+
+## Configuration
+
+<Steps>
+  <Step title="Set the datasource type">
+    Configure Zipline to use S3 storage by setting the `DATASOURCE_TYPE` environment variable:
+
+    ```bash
+    DATASOURCE_TYPE=s3
+    ```
+  </Step>
+
+  <Step title="Configure S3 credentials">
+    Add your S3 credentials and bucket information to your `.env` file:
+
+    ```bash
+    DATASOURCE_S3_ACCESS_KEY_ID=your_access_key_id
+    DATASOURCE_S3_SECRET_ACCESS_KEY=your_secret_access_key
+    DATASOURCE_S3_BUCKET=your-bucket-name
+    DATASOURCE_S3_REGION=us-west-2
+    ```
+
+    <Note>
+      Zipline performs read/write access tests on startup. If the credentials are invalid or the bucket is inaccessible, Zipline will exit with an error message.
+    </Note>
+  </Step>
+
+  <Step title="(Optional) Configure custom endpoint">
+    For S3-compatible providers other than AWS (MinIO, Backblaze B2, DigitalOcean Spaces, etc.), specify a custom endpoint:
+
+    ```bash
+    DATASOURCE_S3_ENDPOINT=https://s3.us-west-002.backblazeb2.com
+    ```
+
+    For MinIO or other providers that require path-style URLs:
+
+    ```bash
+    DATASOURCE_S3_FORCE_PATH_STYLE=true
+    ```
+  </Step>
+
+  <Step title="(Optional) Configure subdirectory">
+    To store files in a specific subdirectory within your bucket:
+
+    ```bash
+    DATASOURCE_S3_SUBDIRECTORY=zipline/uploads
+    ```
+
+    <Tip>
+      This is useful if you're sharing a bucket with other applications or want to organize files by environment (e.g., `production/uploads`, `staging/uploads`).
+    </Tip>
+  </Step>
+
+  <Step title="Remove local storage volume (Docker only)">
+    If using Docker, you can remove the local uploads volume from your `docker-compose.yml` since files are stored in S3:
+
+    ```yaml
+    services:
+      zipline:
+        volumes:
+          # - './uploads:/zipline/uploads'  # Remove this line
+          - './public:/zipline/public'
+          - './themes:/zipline/themes'
+    ```
+  </Step>
+
+  <Step title="Restart Zipline">
+    Restart your Zipline instance to apply the changes:
+
+    ```bash
+    docker compose down && docker compose up -d
+    ```
+
+    Check the logs to verify S3 connection:
+
+    ```bash
+    docker compose logs -f zipline
+    ```
+
+    You should see a message indicating successful bucket access: `able to read/write bucket your-bucket-name`
+  </Step>
+</Steps>
+
+## Provider-Specific Examples
+
+<AccordionGroup>
+  <Accordion title="AWS S3">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+    DATASOURCE_S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    DATASOURCE_S3_BUCKET=my-zipline-bucket
+    DATASOURCE_S3_REGION=us-east-1
+    ```
+
+    <Note>
+      Ensure your IAM user has `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` permissions for the bucket.
+    </Note>
+  </Accordion>
+
+  <Accordion title="MinIO">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=minioadmin
+    DATASOURCE_S3_SECRET_ACCESS_KEY=minioadmin
+    DATASOURCE_S3_BUCKET=zipline
+    DATASOURCE_S3_REGION=us-east-1
+    DATASOURCE_S3_ENDPOINT=http://minio:9000
+    DATASOURCE_S3_FORCE_PATH_STYLE=true
+    ```
+
+    <Tip>
+      When running MinIO in Docker alongside Zipline, use the service name (`minio`) as the hostname in the endpoint URL.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Backblaze B2">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=your_application_key_id
+    DATASOURCE_S3_SECRET_ACCESS_KEY=your_application_key
+    DATASOURCE_S3_BUCKET=your-bucket-name
+    DATASOURCE_S3_REGION=us-west-002
+    DATASOURCE_S3_ENDPOINT=https://s3.us-west-002.backblazeb2.com
+    ```
+
+    <Note>
+      Use your B2 application key ID and key, not your account credentials. The region should match your bucket's region.
+    </Note>
+  </Accordion>
+
+  <Accordion title="DigitalOcean Spaces">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=your_spaces_access_key
+    DATASOURCE_S3_SECRET_ACCESS_KEY=your_spaces_secret_key
+    DATASOURCE_S3_BUCKET=your-space-name
+    DATASOURCE_S3_REGION=nyc3
+    DATASOURCE_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+    ```
+  </Accordion>
+
+  <Accordion title="Cloudflare R2">
+    ```bash
+    DATASOURCE_TYPE=s3
+    DATASOURCE_S3_ACCESS_KEY_ID=your_r2_access_key_id
+    DATASOURCE_S3_SECRET_ACCESS_KEY=your_r2_secret_access_key
+    DATASOURCE_S3_BUCKET=your-bucket-name
+    DATASOURCE_S3_REGION=auto
+    DATASOURCE_S3_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
+    ```
+
+    <Tip>
+      Cloudflare R2 doesn't charge for egress bandwidth, making it a cost-effective option for high-traffic instances.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+## Bucket Permissions
+
+Your S3 bucket policy or IAM user must have the following permissions:
+
+- `s3:PutObject` - Upload files
+- `s3:GetObject` - Download/serve files
+- `s3:DeleteObject` - Delete files
+- `s3:ListBucket` - List files (for metrics)
+- `s3:HeadObject` - Get file metadata
+
+### Example IAM Policy (AWS S3)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:HeadObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::your-bucket-name/*",
+        "arn:aws:s3:::your-bucket-name"
+      ]
+    }
+  ]
+}
+```
+
+## Migration from Local Storage
+
+If you're migrating from local storage to S3:
+
+<Steps>
+  <Step title="Upload existing files to S3">
+    Use the AWS CLI or your provider's tools to upload existing files:
+
+    ```bash
+    aws s3 sync ./uploads s3://your-bucket-name/
+    ```
+  </Step>
+
+  <Step title="Update configuration">
+    Update your `.env` file with S3 credentials as described above.
+  </Step>
+
+  <Step title="Restart Zipline">
+    Restart Zipline to begin using S3 storage.
+  </Step>
+
+  <Step title="Verify uploads">
+    Test uploading a new file and verify it appears in your S3 bucket.
+  </Step>
+</Steps>
+
+<Warning>
+  File names in the database must match the file names in S3. If you modify file names during migration, Zipline won't be able to locate them.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Zipline exits with 'error while testing write access'">
+    This means Zipline cannot write to your bucket. Check:
+
+    - Credentials are correct and not expired
+    - Bucket name and region are correct
+    - IAM user/role has `s3:PutObject` permission
+    - Bucket policy doesn't deny write access
+    - Endpoint URL is correct (for non-AWS providers)
+  </Accordion>
+
+  <Accordion title="Files upload but return 404 when accessed">
+    This usually means:
+
+    - The bucket or objects are not publicly accessible (this is expected - Zipline proxies requests)
+    - Check your `CORE_DEFAULT_DOMAIN` configuration if using custom domains
+    - Verify file was actually uploaded to S3
+  </Accordion>
+
+  <Accordion title="'Connection timeout' errors">
+    Connection timeouts are configured in the S3 client:
+
+    - Connection timeout: 10 seconds (~/workspace/source/src/lib/datasource/S3.ts:55)
+    - Socket timeout: 120 seconds (~/workspace/source/src/lib/datasource/S3.ts:56)
+
+    If you're experiencing consistent timeouts, check:
+
+    - Network connectivity to your S3 endpoint
+    - Firewall rules allowing outbound HTTPS traffic
+    - DNS resolution for your endpoint
+  </Accordion>
+
+  <Accordion title="Large file uploads fail">
+    For files larger than 5GB, Zipline automatically uses multipart upload (~/workspace/source/src/lib/datasource/S3.ts:332-416).
+
+    If large uploads fail:
+
+    - Ensure your bucket supports multipart uploads
+    - Check that `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` permissions are granted
+    - Verify your upload size limits in Zipline config (`FILES_MAX_FILE_SIZE`)
+  </Accordion>
+</AccordionGroup>
+
+## Performance Considerations
+
+- **Connection pooling**: Zipline maintains up to 1000 concurrent connections to S3 (~/workspace/source/src/lib/datasource/S3.ts:58-64)
+- **Keep-alive**: HTTP connections use keep-alive to reduce latency
+- **Multipart uploads**: Files over 5GB automatically use multipart upload in 5MB chunks
+- **Regional performance**: Choose a region close to your users or use a CDN
+
+<Tip>
+  For better performance and lower costs, consider enabling CDN/caching in front of Zipline when using S3 storage.
+</Tip>

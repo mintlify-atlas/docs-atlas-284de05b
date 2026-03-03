@@ -1,0 +1,159 @@
+---
+title: 'Export Folder'
+description: 'Download a folder and all its contents as a ZIP archive'
+---
+
+Export a folder and all its files (including nested folders) as a ZIP archive. The folder structure is preserved in the archive.
+
+## Endpoint
+
+```http
+GET /api/user/folders/:id/export
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The ID of the folder to export
+</ParamField>
+
+## Response
+
+Returns a ZIP file containing all files in the folder and its subfolders. The folder structure is preserved within the archive.
+
+**Content-Type**: `application/zip`
+
+**Content-Disposition**: `attachment; filename="{folder_name}.zip"`
+
+## Behavior
+
+- The export includes all files in the folder recursively
+- Subfolder structure is preserved in the ZIP archive
+- Files maintain their original names
+- If a folder contains no files, the export will be aborted
+- Only files that can be read from the datasource are included
+- You must own the folder to export it
+
+## Example Request
+
+```bash Download folder as ZIP
+curl -X GET "https://your-zipline-instance.com/api/user/folders/clx123/export" \
+  -H "Authorization: your-api-token" \
+  -o folder_export.zip
+```
+
+```bash Download with original folder name
+curl -X GET "https://your-zipline-instance.com/api/user/folders/clx123/export" \
+  -H "Authorization: your-api-token" \
+  -O -J
+```
+
+```javascript JavaScript/TypeScript
+async function exportFolder(folderId: string) {
+  const response = await fetch(
+    `https://your-zipline-instance.com/api/user/folders/${folderId}/export`,
+    {
+      headers: {
+        'Authorization': 'your-api-token',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Export failed');
+  }
+
+  // Get filename from Content-Disposition header
+  const disposition = response.headers.get('content-disposition');
+  const filename = disposition?.match(/filename="(.+)"/)?.[1] || 'folder.zip';
+
+  // Download the file
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+```
+
+```python Python
+import requests
+
+def export_folder(folder_id):
+    url = f'https://your-zipline-instance.com/api/user/folders/{folder_id}/export'
+    headers = {'Authorization': 'your-api-token'}
+    
+    response = requests.get(url, headers=headers, stream=True)
+    response.raise_for_status()
+    
+    # Extract filename from Content-Disposition header
+    disposition = response.headers.get('content-disposition', '')
+    filename = disposition.split('filename="')[1].split('"')[0] if 'filename=' in disposition else 'folder.zip'
+    
+    with open(filename, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+    
+    return filename
+```
+
+## ZIP Structure Example
+
+For a folder structure like:
+
+```
+Screenshots/
+├── 2024/
+│   ├── January/
+│   │   ├── screenshot1.png
+│   │   └── screenshot2.png
+│   └── February/
+│       └── screenshot3.png
+└── logo.png
+```
+
+The exported ZIP will contain:
+
+```
+Screenshots.zip
+├── logo.png
+├── 2024/
+│   ├── January/
+│   │   ├── screenshot1.png
+│   │   └── screenshot2.png
+│   └── February/
+│       └── screenshot3.png
+```
+
+## Error Responses
+
+```json 403 Forbidden
+{
+  "error": "Forbidden",
+  "message": "You do not own this folder",
+  "statusCode": 403
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "Folder not found",
+  "statusCode": 404
+}
+```
+
+## Notes
+
+- Large folders may take time to export
+- The ZIP is created with maximum compression (level 9)
+- Files that cannot be read from storage are skipped with a warning in the server logs
+- Empty folders (containing no files) will abort the export
+- You must own the folder to export it - admins cannot export other users' folders
+- The export endpoint uses response hijacking to stream the ZIP directly, so standard JSON error responses may not apply once streaming begins

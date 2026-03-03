@@ -1,0 +1,607 @@
+---
+title: Error Handling
+description: Understanding Zipline API error responses and how to handle them properly
+---
+
+The Zipline API uses standard HTTP status codes and returns detailed error messages in JSON format to help you diagnose and handle errors effectively.
+
+## Error Response Format
+
+All error responses follow this consistent structure:
+
+```json
+{
+  "error": "Description of what went wrong",
+  "statusCode": 400
+}
+```
+
+For validation errors (Zod schema validation), the response includes additional details:
+
+```json
+{
+  "error": "Validation Error",
+  "statusCode": 400,
+  "issues": [
+    {
+      "path": ["username"],
+      "message": "Required",
+      "code": "invalid_type"
+    }
+  ]
+}
+```
+
+## HTTP Status Codes
+
+Zipline uses standard HTTP status codes to indicate the success or failure of requests:
+
+### Success Codes (2xx)
+
+| Code | Status | Description |
+|------|--------|-------------|
+| 200 | OK | Request succeeded |
+| 201 | Created | Resource created successfully |
+| 301 | Moved Permanently | Resource has been redirected |
+
+### Client Error Codes (4xx)
+
+| Code | Status | Description |
+|------|--------|-------------|
+| 400 | Bad Request | Invalid request format or parameters |
+| 401 | Unauthorized | Missing or invalid authentication |
+| 403 | Forbidden | Valid auth but insufficient permissions |
+| 404 | Not Found | Requested resource doesn't exist |
+| 413 | Payload Too Large | File or request body exceeds size limits |
+| 429 | Too Many Requests | Rate limit exceeded |
+
+### Server Error Codes (5xx)
+
+| Code | Status | Description |
+|------|--------|-------------|
+| 500 | Internal Server Error | Unexpected server error occurred |
+
+## Common Error Scenarios
+
+### Authentication Errors (401)
+
+<AccordionGroup>
+  <Accordion title="No token provided">
+    **Error:**
+    ```json
+    {
+      "error": "no token",
+      "statusCode": 401
+    }
+    ```
+    
+    **Cause:** No Authorization header included in the request.
+    
+    **Solution:**
+    ```bash
+    # Add Authorization header
+    curl -H "Authorization: YOUR_TOKEN" ...
+    ```
+  </Accordion>
+
+  <Accordion title="Invalid token format">
+    **Error:**
+    ```json
+    {
+      "error": "could not decrypt token",
+      "statusCode": 401
+    }
+    ```
+    
+    **Cause:** Token is malformed or corrupted.
+    
+    **Solution:** Verify you're using the correct token from your Zipline dashboard. Copy it again if needed.
+  </Accordion>
+
+  <Accordion title="Token doesn't match any user">
+    **Error:**
+    ```json
+    {
+      "error": "invalid authorization token",
+      "statusCode": 401
+    }
+    ```
+    
+    **Cause:** Token was valid but doesn't belong to any user (possibly deleted or regenerated).
+    
+    **Solution:** Generate a new token from your user settings.
+  </Accordion>
+
+  <Accordion title="Session expired">
+    **Error:**
+    ```json
+    {
+      "error": "not logged in",
+      "statusCode": 401
+    }
+    ```
+    
+    **Cause:** Session cookie is missing or expired.
+    
+    **Solution:** Log in again via `/api/auth/login` to get a new session.
+  </Accordion>
+</AccordionGroup>
+
+### Permission Errors (403)
+
+<AccordionGroup>
+  <Accordion title="Insufficient role permissions">
+    **Error:**
+    ```json
+    {
+      "error": "forbidden",
+      "statusCode": 403
+    }
+    ```
+    
+    **Cause:** User's role doesn't have permission for this action. From src/server/middleware/administrator.ts:4-8:
+    
+    ```typescript
+    export async function administratorMiddleware(req, res) {
+      if (!req.user) return res.forbidden('not logged in');
+      if (!isAdministrator(req.user.role)) return res.forbidden();
+    }
+    ```
+    
+    **Solution:** This endpoint requires admin privileges (ADMIN or SUPERADMIN role).
+  </Accordion>
+
+  <Accordion title="Quota exceeded">
+    **Error:**
+    ```json
+    {
+      "error": "Uploading this file would exceed your quota of 100 MB",
+      "statusCode": 403
+    }
+    ```
+    
+    **Cause:** File upload would exceed user's storage quota.
+    
+    **Solution:** Delete old files or contact your admin to increase your quota.
+  </Accordion>
+
+  <Accordion title="Folder not accessible">
+    **Error:**
+    ```json
+    {
+      "error": "folder is not open",
+      "statusCode": 403
+    }
+    ```
+    
+    **Cause:** Attempting anonymous upload to a folder that doesn't allow it.
+    
+    **Solution:** Authenticate with a valid token or ask the folder owner to enable public uploads.
+  </Accordion>
+</AccordionGroup>
+
+### Validation Errors (400)
+
+<AccordionGroup>
+  <Accordion title="Invalid username or password">
+    **Error:**
+    ```json
+    {
+      "error": "Invalid username or password",
+      "statusCode": 400
+    }
+    ```
+    
+    **Cause:** Login credentials are incorrect.
+    
+    **Solution:** Double-check your username and password.
+  </Accordion>
+
+  <Accordion title="Missing required fields">
+    **Error:**
+    ```json
+    {
+      "error": "Response Validation Error",
+      "statusCode": 400,
+      "issues": [
+        {
+          "path": ["destination"],
+          "message": "Required"
+        }
+      ]
+    }
+    ```
+    
+    **Cause:** Required field missing from request body.
+    
+    **Solution:** Include all required fields in your request.
+  </Accordion>
+
+  <Accordion title="Invalid file extension">
+    **Error:**
+    ```json
+    {
+      "error": "file[0]: File extension .exe is not allowed",
+      "statusCode": 400
+    }
+    ```
+    
+    **Cause:** File type is in the disabled extensions list.
+    
+    **Solution:** This instance doesn't allow certain file types. Contact your admin or use an allowed file type.
+  </Accordion>
+
+  <Accordion title="Duplicate resource">
+    **Error:**
+    ```json
+    {
+      "error": "Vanity already taken",
+      "statusCode": 400
+    }
+    ```
+    
+    **Cause:** Trying to create a resource with a name that already exists.
+    
+    **Solution:** Choose a different vanity URL or filename.
+  </Accordion>
+
+  <Accordion title="Invalid file name">
+    **Error:**
+    ```json
+    {
+      "error": "file[0]: Invalid characters in original filename",
+      "statusCode": 400
+    }
+    ```
+    
+    **Cause:** Filename contains characters that aren't allowed.
+    
+    **Solution:** Remove special characters from the filename.
+  </Accordion>
+</AccordionGroup>
+
+### File Size Errors (413)
+
+<AccordionGroup>
+  <Accordion title="File too large">
+    **Error:**
+    ```json
+    {
+      "error": "file[0]: File size is too large. Maximum file size is 104857600 bytes",
+      "statusCode": 413
+    }
+    ```
+    
+    **Cause:** File exceeds the configured maximum file size.
+    
+    From src/server/routes/api/upload/index.ts:86-89:
+    ```typescript
+    if (file.file.bytesRead > bytes(config.files.maxFileSize))
+      return res.payloadTooLarge(
+        `file[${i}]: File size is too large. Maximum file size is ${bytes(config.files.maxFileSize)} bytes`
+      );
+    ```
+    
+    **Solution:** 
+    - Compress the file
+    - Use chunked upload for large files (`/api/upload/partial`)
+    - Ask admin to increase `ZIPLINE_FILES_MAX_FILE_SIZE`
+  </Accordion>
+
+  <Accordion title="Total upload too large">
+    **Error:**
+    ```json
+    {
+      "error": "Uploading these files would exceed your quota",
+      "statusCode": 413
+    }
+    ```
+    
+    **Cause:** Combined size of files exceeds user quota.
+    
+    **Solution:** Upload fewer files at once or delete old files.
+  </Accordion>
+</AccordionGroup>
+
+### Not Found Errors (404)
+
+<AccordionGroup>
+  <Accordion title="Resource not found">
+    **Error:**
+    ```json
+    {
+      "error": "Not Found",
+      "statusCode": 404
+    }
+    ```
+    
+    **Cause:** File, URL, user, or other resource doesn't exist or you don't have permission to view it.
+    
+    **Solution:** Verify the resource ID and your permissions.
+  </Accordion>
+
+  <Accordion title="Endpoint not found">
+    **Error:**
+    ```json
+    {
+      "message": "Route POST:/api/invalid not found",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+    ```
+    
+    **Cause:** The API endpoint doesn't exist.
+    
+    **Solution:** Check the API documentation for correct endpoint paths.
+  </Accordion>
+
+  <Accordion title="Feature disabled">
+    **Error:**
+    ```json
+    {
+      "error": "Not Found",
+      "statusCode": 404
+    }
+    ```
+    
+    **Cause:** Feature is disabled in instance configuration. For example, from src/server/routes/api/healthcheck.ts:16:
+    
+    ```typescript
+    if (!config.features.healthcheck) return res.notFound();
+    ```
+    
+    **Solution:** This feature is disabled on this instance. Contact your admin.
+  </Accordion>
+</AccordionGroup>
+
+### Rate Limit Errors (429)
+
+<AccordionGroup>
+  <Accordion title="Rate limit exceeded">
+    **Error:**
+    ```json
+    {
+      "error": "Rate limit exceeded",
+      "statusCode": 429
+    }
+    ```
+    
+    **Headers:**
+    ```
+    X-RateLimit-Limit: 10
+    X-RateLimit-Remaining: 0
+    X-RateLimit-Reset: 1640000000
+    Retry-After: 60
+    ```
+    
+    **Cause:** Too many requests in a short time period.
+    
+    **Solution:** Wait for the time specified in `Retry-After` header, then retry. See [Rate Limits](/api/rate-limits) for details.
+  </Accordion>
+</AccordionGroup>
+
+### Server Errors (500)
+
+<AccordionGroup>
+  <Accordion title="Internal server error">
+    **Error:**
+    ```json
+    {
+      "error": "Internal Server Error",
+      "statusCode": 500
+    }
+    ```
+    
+    **Cause:** Unexpected error occurred on the server.
+    
+    **Solution:** 
+    - Retry the request after a short delay
+    - Check server logs if you're the admin
+    - Report the issue if it persists
+  </Accordion>
+
+  <Accordion title="Database connection error">
+    **Error:**
+    ```json
+    {
+      "error": "there was an error during a healthcheck",
+      "statusCode": 500
+    }
+    ```
+    
+    **Cause:** Database is unavailable or unreachable.
+    
+    **Solution:** This is a server-side issue. Contact your instance administrator.
+  </Accordion>
+
+  <Accordion title="Datasource error">
+    **Error:**
+    ```json
+    {
+      "error": "Failed to rename file in datasource",
+      "statusCode": 500
+    }
+    ```
+    
+    **Cause:** Storage backend (S3, local filesystem, etc.) encountered an error.
+    
+    **Solution:** Contact your instance administrator to check datasource configuration and connectivity.
+  </Accordion>
+</AccordionGroup>
+
+## Error Handling Best Practices
+
+### 1. Always Check Status Codes
+
+```javascript
+const response = await fetch('https://zipline.example.com/api/upload', {
+  method: 'POST',
+  headers: { 'Authorization': token },
+  body: formData
+});
+
+if (!response.ok) {
+  const error = await response.json();
+  console.error(`Error ${error.statusCode}: ${error.error}`);
+  
+  // Handle specific errors
+  switch (error.statusCode) {
+    case 401:
+      // Redirect to login
+      break;
+    case 413:
+      // File too large
+      break;
+    case 429:
+      // Rate limited - retry later
+      break;
+    default:
+      // Generic error handling
+  }
+}
+```
+
+### 2. Implement Retry Logic
+
+```python
+import requests
+import time
+
+def api_request_with_retry(url, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers={'Authorization': token})
+            
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', 60))
+                time.sleep(retry_after)
+                continue
+            
+            if response.status_code >= 500:
+                # Exponential backoff for server errors
+                time.sleep(2 ** attempt)
+                continue
+                
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(2 ** attempt)
+```
+
+### 3. Validate Input Before Sending
+
+```typescript
+function validateFile(file: File): string | null {
+  const maxSize = 100 * 1024 * 1024; // 100 MB
+  const disallowedExtensions = ['.exe', '.bat', '.sh'];
+  
+  if (file.size > maxSize) {
+    return `File too large. Maximum size is ${maxSize} bytes`;
+  }
+  
+  const extension = file.name.substring(file.name.lastIndexOf('.'));
+  if (disallowedExtensions.includes(extension)) {
+    return `File type ${extension} is not allowed`;
+  }
+  
+  return null; // Valid
+}
+
+// Use before making API request
+const error = validateFile(myFile);
+if (error) {
+  console.error(error);
+  return;
+}
+
+// Proceed with upload
+await uploadFile(myFile);
+```
+
+### 4. Log Errors Appropriately
+
+```go
+func uploadFile(filepath string) error {
+    resp, err := client.Post(uploadURL, formData)
+    if err != nil {
+        log.Printf("Network error during upload: %v", err)
+        return err
+    }
+    defer resp.Body.Close()
+    
+    if resp.StatusCode != 200 {
+        body, _ := io.ReadAll(resp.Body)
+        var apiError APIError
+        json.Unmarshal(body, &apiError)
+        
+        log.Printf("API error %d: %s", apiError.StatusCode, apiError.Error)
+        
+        // Log additional context
+        if apiError.Issues != nil {
+            log.Printf("Validation issues: %+v", apiError.Issues)
+        }
+        
+        return fmt.Errorf("upload failed: %s", apiError.Error)
+    }
+    
+    return nil
+}
+```
+
+## Error Response Reference
+
+From the source code (src/server/index.ts:241-259), Zipline's error handler works as follows:
+
+```typescript
+server.setErrorHandler((error, _, res) => {
+  // Zod validation errors
+  if (hasZodFastifySchemaValidationErrors(error)) {
+    return res.status(400).send({
+      error: error.message ?? 'Response Validation Error',
+      statusCode: 400,
+      issues: error.validation,
+    });
+  }
+
+  // HTTP errors with status codes
+  if (error.statusCode) {
+    res.status(error.statusCode);
+    res.send({ error: error.message, statusCode: error.statusCode });
+  } else {
+    // Unexpected errors
+    console.error(error);
+    res.status(500);
+    res.send({ error: 'Internal Server Error', statusCode: 500 });
+  }
+});
+```
+
+## Getting Help
+
+If you encounter an error you can't resolve:
+
+1. Check the error message and status code
+2. Review this documentation for the specific error
+3. Check your instance's configuration
+4. Review server logs (if you're an admin)
+5. Report issues on [GitHub](https://github.com/diced/zipline/issues)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Review authentication methods
+  </Card>
+  <Card title="Rate Limits" icon="gauge-high" href="/api/rate-limits">
+    Understand rate limiting
+  </Card>
+  <Card title="Upload Files" icon="cloud-arrow-up" href="/api/endpoints/upload">
+    Start uploading files
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/introduction">
+    View full API documentation
+  </Card>
+</CardGroup>

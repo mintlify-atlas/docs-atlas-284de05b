@@ -1,0 +1,717 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Zipline
+---
+
+This guide covers common issues you may encounter while running Zipline and how to resolve them.
+
+## Getting Help
+
+Before diving into troubleshooting:
+
+1. Check the [Zipline logs](#checking-logs) for error messages
+2. Search existing [GitHub issues](https://github.com/diced/zipline/issues)
+3. Join the [Discord server](https://discord.gg/EAhCRfGxCF) for community support
+4. Review relevant configuration in this documentation
+
+## Checking Logs
+
+### Docker Deployment
+
+```bash
+# View recent logs
+docker compose logs zipline
+
+# Follow logs in real-time
+docker compose logs -f zipline
+
+# View last 100 lines
+docker compose logs --tail 100 zipline
+
+# View database logs
+docker compose logs postgresql
+```
+
+### Source Deployment
+
+```bash
+# If running with systemd
+sudo journalctl -u zipline -f
+
+# If running directly
+# Check stdout/stderr or log files in your deployment
+```
+
+### Enable Debug Logging
+
+For more detailed logs, set the DEBUG environment variable:
+
+```bash
+DEBUG=zipline*
+```
+
+This enables verbose logging for all Zipline components.
+
+## Installation & Startup Issues
+
+<AccordionGroup>
+  <Accordion title="Zipline exits immediately on startup">
+    **Common causes:**
+
+    1. **Missing CORE_SECRET**
+       ```
+       Error: CORE_SECRET is required
+       ```
+       **Solution**: Generate and set CORE_SECRET:
+       ```bash
+       echo "CORE_SECRET=$(openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32)" >> .env
+       ```
+
+    2. **Database connection failed**
+       ```
+       Error: connect ECONNREFUSED 127.0.0.1:5432
+       ```
+       **Solution**: 
+       - Verify PostgreSQL is running: `docker compose ps`
+       - Check DATABASE_URL is correct
+       - Wait for database to be ready (use healthcheck in docker-compose)
+
+    3. **S3 access test failed**
+       ```
+       there was an error while testing write access
+       zipline will now exit
+       ```
+       **Solution**: Check S3 configuration:
+       - Verify credentials are correct
+       - Ensure bucket exists and is accessible
+       - Check bucket permissions (see [S3 Setup](/guides/s3-setup#bucket-permissions))
+  </Accordion>
+
+  <Accordion title="Cannot connect to database">
+    **Error messages:**
+    ```
+    Error: P1001: Can't reach database server
+    Error: password authentication failed for user
+    ```
+
+    **Solutions:**
+
+    1. **Verify database is running:**
+       ```bash
+       docker compose ps postgresql
+       ```
+
+    2. **Check DATABASE_URL format:**
+       ```bash
+       # Correct format
+       DATABASE_URL=postgres://username:password@host:5432/database
+       ```
+
+    3. **Check password special characters:**
+       Passwords with special characters may need URL encoding:
+       ```bash
+       # If password contains @, #, etc.
+       # Encode it: https://www.urlencoder.org/
+       ```
+
+    4. **Wait for database to be ready:**
+       Docker compose should have healthcheck:
+       ```yaml
+       depends_on:
+         postgresql:
+           condition: service_healthy
+       ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    **Error:**
+    ```
+    Error: listen EADDRINUSE: address already in use :::3000
+    ```
+
+    **Solutions:**
+
+    1. **Change Zipline port:**
+       ```bash
+       CORE_PORT=3001
+       ```
+
+    2. **Find and stop process using port:**
+       ```bash
+       # Find process
+       sudo lsof -i :3000
+       # or
+       sudo netstat -tlnp | grep 3000
+
+       # Stop process
+       sudo kill -9 <PID>
+       ```
+
+    3. **Change Docker port mapping:**
+       ```yaml
+       ports:
+         - '3001:3000'  # External:Internal
+       ```
+  </Accordion>
+
+  <Accordion title="Docker compose fails to start">
+    **Common issues:**
+
+    1. **Missing environment variables:**
+       ```
+       Error: variable is not set: POSTGRESQL_PASSWORD
+       ```
+       **Solution**: Create .env file with required variables
+
+    2. **Invalid docker-compose.yml:**
+       ```bash
+       # Validate syntax
+       docker compose config
+       ```
+
+    3. **Volume permission issues:**
+       ```bash
+       # Fix permissions
+       sudo chown -R $USER:$USER ./uploads ./public ./themes
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Upload Issues
+
+<AccordionGroup>
+  <Accordion title="File uploads fail or return errors">
+    **Error types:**
+
+    1. **413 Payload Too Large**
+       - File exceeds `FILES_MAX_FILE_SIZE` limit
+       - Reverse proxy has lower limit
+
+       **Solution:**
+       ```bash
+       # Zipline
+       FILES_MAX_FILE_SIZE=500mb
+       ```
+       ```nginx
+       # Nginx
+       client_max_body_size 500M;
+       ```
+
+    2. **408 Request Timeout**
+       - Upload taking too long
+       - Network issues
+
+       **Solution**: Increase timeouts in reverse proxy:
+       ```nginx
+       proxy_connect_timeout 600;
+       proxy_send_timeout 600;
+       proxy_read_timeout 600;
+       ```
+
+    3. **401 Unauthorized**
+       - Invalid or missing API token
+       - Token revoked or expired
+
+       **Solution**: 
+       - Generate new token in user settings
+       - Update ShareX/client configuration
+
+    4. **Storage write failed**
+       - Disk full (local storage)
+       - S3 permissions issue
+
+       **Solution**:
+       ```bash
+       # Check disk space
+       df -h
+
+       # For S3, verify permissions
+       # See S3 Setup guide
+       ```
+  </Accordion>
+
+  <Accordion title="Uploads succeed but files return 404">
+    **Common causes:**
+
+    1. **Files not in correct location:**
+       ```bash
+       # Verify file exists
+       ls -la ./uploads/
+       # For S3
+       aws s3 ls s3://your-bucket/
+       ```
+
+    2. **Incorrect datasource configuration:**
+       ```bash
+       # Check datasource type matches actual storage
+       # If using S3, must have DATASOURCE_TYPE=s3
+       ```
+
+    3. **File permissions (local storage):**
+       ```bash
+       # Ensure Zipline can read files
+       sudo chown -R zipline:zipline ./uploads
+       # or if running as current user
+       sudo chown -R $USER:$USER ./uploads
+       ```
+
+    4. **S3 bucket/subdirectory mismatch:**
+       - Verify DATASOURCE_S3_BUCKET matches actual bucket
+       - Check DATASOURCE_S3_SUBDIRECTORY if used
+  </Accordion>
+
+  <Accordion title="Chunked/partial uploads fail">
+    **Error:**
+    ```
+    Error: Chunk upload failed
+    ```
+
+    **Solutions:**
+
+    1. **Check chunk configuration:**
+       ```bash
+       CHUNKS_ENABLED=true
+       CHUNKS_SIZE=25mb
+       CHUNKS_MAX=95mb
+       ```
+
+    2. **Verify temp directory is writable:**
+       ```bash
+       # Default: OS temp directory
+       # Custom:
+       CORE_TEMP_DIRECTORY=/path/to/temp
+       ```
+
+    3. **Increase reverse proxy limits:**
+       Must accommodate chunk size + overhead
+  </Accordion>
+
+  <Accordion title="Image compression not working">
+    **Check:**
+
+    1. **Feature is enabled:**
+       ```bash
+       FEATURES_IMAGE_COMPRESSION=true
+       ```
+
+    2. **Compression format is set:**
+       ```bash
+       FILES_DEFAULT_COMPRESSION_FORMAT=jpg
+       # or webp, png
+       ```
+
+    3. **Check logs for compression errors:**
+       ```bash
+       docker compose logs zipline | grep compression
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Authentication & Users
+
+<AccordionGroup>
+  <Accordion title="Cannot log in / wrong password">
+    **Solutions:**
+
+    1. **Reset password via CLI:**
+       ```bash
+       docker exec -it zipline pnpm ctl user reset-password <username>
+       ```
+
+    2. **Verify user exists:**
+       ```bash
+       docker exec -it zipline pnpm ctl user list
+       ```
+
+    3. **Check for special characters in password:**
+       - Avoid special characters that might be interpreted by shell
+       - Use strong alphanumeric passwords
+  </Accordion>
+
+  <Accordion title="OAuth login fails">
+    **Common issues:**
+
+    1. **Redirect URI mismatch:**
+       - OAuth provider redirect URI must match exactly
+       - Include `https://your-domain.com/api/auth/oauth/<provider>/callback`
+
+    2. **Missing OAuth configuration:**
+       ```bash
+       # Discord example
+       OAUTH_DISCORD_CLIENT_ID=your_client_id
+       OAUTH_DISCORD_CLIENT_SECRET=your_secret
+       OAUTH_DISCORD_REDIRECT_URI=https://your-domain.com/api/auth/oauth/discord/callback
+       ```
+
+    3. **OAuth provider credentials invalid:**
+       - Verify client ID and secret are correct
+       - Check if OAuth app is enabled in provider dashboard
+  </Accordion>
+
+  <Accordion title="2FA/TOTP not working">
+    **Solutions:**
+
+    1. **Check TOTP is enabled:**
+       ```bash
+       MFA_TOTP_ENABLED=true
+       MFA_TOTP_ISSUER=Zipline
+       ```
+
+    2. **Time synchronization:**
+       - TOTP requires accurate system time
+       - Sync server time: `sudo ntpdate -s time.nist.gov`
+
+    3. **Regenerate TOTP secret:**
+       - Disable and re-enable 2FA in user settings
+       - Scan new QR code
+  </Accordion>
+
+  <Accordion title="User registration not working">
+    **Check feature flag:**
+    ```bash
+    FEATURES_USER_REGISTRATION=true
+    # For OAuth registration
+    FEATURES_OAUTH_REGISTRATION=true
+    ```
+
+    **Invites:**
+    - If registration is disabled, users need invites
+    - Generate invite in admin panel
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow file uploads/downloads">
+    **Possible causes:**
+
+    1. **Network bottleneck:**
+       - Check bandwidth between client and server
+       - Use `iperf3` to test network speed
+
+    2. **Disk I/O bottleneck (local storage):**
+       ```bash
+       # Test disk speed
+       sudo hdparm -t /dev/sda
+       # or
+       dd if=/dev/zero of=test bs=1M count=1000
+       ```
+
+    3. **S3 performance:**
+       - Choose region close to users
+       - Consider CloudFront or CDN
+       - Check S3 connection pooling is working (max 1000 connections)
+
+    4. **Reverse proxy not using keep-alive:**
+       ```nginx
+       # Nginx
+       proxy_http_version 1.1;
+       proxy_set_header Connection "";
+       ```
+  </Accordion>
+
+  <Accordion title="High memory usage">
+    **Solutions:**
+
+    1. **Limit thumbnail generation threads:**
+       ```bash
+       FEATURES_THUMBNAILS_NUM_THREADS=2
+       ```
+
+    2. **Disable metrics if not needed:**
+       ```bash
+       FEATURES_METRICS_ENABLED=false
+       ```
+
+    3. **Reduce chunk size:**
+       ```bash
+       CHUNKS_SIZE=10mb
+       ```
+
+    4. **Monitor with Docker stats:**
+       ```bash
+       docker stats zipline
+       ```
+  </Accordion>
+
+  <Accordion title="Database growing too large">
+    **Solutions:**
+
+    1. **Disable metrics collection:**
+       ```bash
+       FEATURES_METRICS_ENABLED=false
+       ```
+
+    2. **Clean old metrics:**
+       ```sql
+       -- Connect to database
+       DELETE FROM "Metric" WHERE "createdAt" < NOW() - INTERVAL '30 days';
+       ```
+
+    3. **Vacuum database:**
+       ```bash
+       docker exec zipline-postgresql vacuumdb -U zipline -d zipline --full
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Storage Issues
+
+<AccordionGroup>
+  <Accordion title="S3 connection errors">
+    **Error types:**
+
+    1. **Connection timeout:**
+       - Check network connectivity to S3 endpoint
+       - Verify endpoint URL is correct
+       - Check firewall allows HTTPS to S3
+
+    2. **Access denied:**
+       - Verify IAM permissions (see [S3 Setup](/guides/s3-setup#bucket-permissions))
+       - Check bucket policy
+       - Ensure credentials are valid
+
+    3. **Bucket not found:**
+       - Verify bucket name is correct
+       - Check region matches bucket region
+       - For path-style: ensure DATASOURCE_S3_FORCE_PATH_STYLE=true
+  </Accordion>
+
+  <Accordion title="Local storage disk full">
+    **Solutions:**
+
+    1. **Check disk usage:**
+       ```bash
+       df -h
+       du -sh ./uploads
+       ```
+
+    2. **Clean up old files:**
+       - Delete expired files manually
+       - Ensure deletion task is running:
+         ```bash
+         TASKS_DELETE_INTERVAL=30m
+         ```
+
+    3. **Migrate to S3:**
+       - See [S3 Setup guide](/guides/s3-setup)
+       - Transfer existing files to S3
+  </Accordion>
+
+  <Accordion title="Thumbnails not generating">
+    **Check:**
+
+    1. **Feature is enabled:**
+       ```bash
+       FEATURES_THUMBNAILS_ENABLED=true
+       ```
+
+    2. **Thumbnail interval:**
+       ```bash
+       TASKS_THUMBNAILS_INTERVAL=30m
+       ```
+
+    3. **Check logs for errors:**
+       ```bash
+       docker compose logs zipline | grep thumbnail
+       ```
+
+    4. **Supported formats:**
+       - Images: JPEG, PNG, WebP, GIF
+       - Videos: MP4, WebM, MOV (requires ffmpeg)
+  </Accordion>
+</AccordionGroup>
+
+## Reverse Proxy Issues
+
+<AccordionGroup>
+  <Accordion title="502 Bad Gateway">
+    **Causes:**
+
+    1. **Zipline not running:**
+       ```bash
+       docker compose ps zipline
+       # Should show "Up"
+       ```
+
+    2. **Wrong proxy_pass address:**
+       ```nginx
+       # Should match Zipline's bind address
+       proxy_pass http://localhost:3000;
+       ```
+
+    3. **Firewall blocking connection:**
+       ```bash
+       # Allow local connections
+       sudo ufw allow from 127.0.0.1
+       ```
+  </Accordion>
+
+  <Accordion title="Client IP shows as proxy IP">
+    **Solution:**
+    ```bash
+    # Enable trust proxy
+    CORE_TRUST_PROXY=true
+    ```
+
+    And ensure proxy sends headers:
+    ```nginx
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    ```
+  </Accordion>
+
+  <Accordion title="Infinite redirect loop">
+    **Common with Cloudflare:**
+
+    1. **Set SSL mode to Full:**
+       - Cloudflare Dashboard → SSL/TLS → Full or Full (strict)
+
+    2. **Check HTTPS configuration:**
+       ```bash
+       CORE_RETURN_HTTPS_URLS=true
+       ```
+
+    3. **Verify reverse proxy doesn't force redirect:**
+       - Remove HTTP to HTTPS redirects if Cloudflare handles it
+  </Accordion>
+</AccordionGroup>
+
+## Miscellaneous
+
+<AccordionGroup>
+  <Accordion title="ShareX configuration not working">
+    **Common issues:**
+
+    1. **Wrong API endpoint:**
+       ```
+       URL: https://your-domain.com/api/upload
+       ```
+
+    2. **Missing or wrong authorization:**
+       ```
+       Header: Authorization
+       Value: YOUR_API_TOKEN
+       ```
+
+    3. **File form field name:**
+       ```
+       File form name: file
+       ```
+
+    4. **Response URL parsing:**
+       ```
+       URL: $json:url$
+       ```
+  </Accordion>
+
+  <Accordion title="Custom domain not working">
+    **Checklist:**
+
+    - [ ] DNS A/AAAA record points to server
+    - [ ] Domain added to DOMAINS or admin dashboard
+    - [ ] Reverse proxy accepts domain
+    - [ ] SSL certificate covers domain
+    - [ ] CORE_TRUST_PROXY=true if behind proxy
+
+    See [Custom Domains guide](/guides/custom-domains) for details.
+  </Accordion>
+
+  <Accordion title="Webhooks not firing">
+    **Check:**
+
+    1. **Webhook URL is configured:**
+       ```bash
+       # Discord
+       DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+       # HTTP
+       HTTP_WEBHOOK_ON_UPLOAD=https://your-webhook.com/endpoint
+       ```
+
+    2. **Check logs for webhook errors:**
+       ```bash
+       docker compose logs zipline | grep webhook
+       ```
+
+    3. **Verify webhook endpoint is reachable:**
+       ```bash
+       curl -X POST https://your-webhook.com/endpoint
+       ```
+  </Accordion>
+
+  <Accordion title="Database migrations fail">
+    **Error:**
+    ```
+    Error: Migration failed
+    ```
+
+    **Solutions:**
+
+    1. **Check database connection:**
+       - Ensure database is accessible
+       - Verify credentials
+
+    2. **Manual migration:**
+       ```bash
+       docker exec zipline pnpm prisma migrate deploy
+       ```
+
+    3. **Reset database (development only):**
+       ```bash
+       docker exec zipline pnpm prisma migrate reset
+       ```
+       <Warning>
+         This deletes all data. Only use in development!
+       </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Getting More Help
+
+If you're still experiencing issues:
+
+1. **Gather information:**
+   - Zipline version: Check GitHub release or Docker image tag
+   - Deployment method: Docker, source, etc.
+   - Configuration: Relevant environment variables (redact secrets)
+   - Error logs: Recent error messages
+   - Steps to reproduce: What triggers the issue
+
+2. **Search existing issues:**
+   - [GitHub Issues](https://github.com/diced/zipline/issues)
+   - Use search with error messages or keywords
+
+3. **Ask for help:**
+   - [Discord server](https://discord.gg/EAhCRfGxCF) - Community support
+   - [GitHub Discussions](https://github.com/diced/zipline/discussions) - Questions and ideas
+   - [GitHub Issues](https://github.com/diced/zipline/issues/new) - Bug reports
+
+4. **Provide context:**
+   Include:
+   - Description of the issue
+   - What you've already tried
+   - Relevant configuration (redacted)
+   - Error logs
+   - Environment details (OS, Docker version, etc.)
+
+<Tip>
+  When asking for help, use code blocks for logs and configuration. This makes it easier to read and helps others assist you faster.
+</Tip>
+
+## Common Error Messages
+
+| Error Message | Likely Cause | Solution |
+|---------------|--------------|----------|
+| `CORE_SECRET is required` | Missing secret | Generate and set CORE_SECRET in .env |
+| `connect ECONNREFUSED` | Database not accessible | Check DATABASE_URL and database status |
+| `error while testing write access` | S3 permissions issue | Verify S3 credentials and bucket permissions |
+| `listen EADDRINUSE` | Port already in use | Change CORE_PORT or stop conflicting process |
+| `Unauthorized` | Invalid API token | Generate new token in user settings |
+| `Payload Too Large` | File size limit | Increase FILES_MAX_FILE_SIZE and proxy limits |
+| `Migration failed` | Database migration issue | Check database connection, run migrations manually |
+| `ENOSPC: no space left` | Disk full | Clean up files or increase disk space |
+
+<Note>
+  For security issues, please report via [GitHub Security Advisories](https://github.com/diced/zipline/security/advisories) instead of public issues or Discord.
+</Note>

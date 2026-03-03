@@ -1,0 +1,256 @@
+---
+title: 'Create Short URL'
+description: 'Create a new shortened URL'
+---
+
+Create a shortened URL that redirects to a destination. You can optionally set a custom vanity URL, password protection, view limits, and more.
+
+## Endpoint
+
+```http
+POST /api/user/urls
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Rate Limiting
+
+This endpoint respects the server's configured rate limits.
+
+## Request Body
+
+<ParamField body="destination" type="string" required>
+  The URL to redirect to. Must be a valid URL string with at least 1 character.
+</ParamField>
+
+<ParamField body="vanity" type="string | null">
+  Custom vanity string for the URL. Maximum 100 characters. If not provided or `null`, a random code will be used. Must be unique.
+</ParamField>
+
+<ParamField body="enabled" type="boolean" default="true">
+  Whether the URL should be active immediately after creation.
+</ParamField>
+
+## Request Headers
+
+<ParamField header="X-Zipline-Max-Views" type="number">
+  Maximum number of views before the URL is disabled. Must be at least 1.
+</ParamField>
+
+<ParamField header="X-Zipline-Password" type="string">
+  Password to protect the URL. Users will need to enter this password before being redirected.
+</ParamField>
+
+<ParamField header="X-Zipline-Domain" type="string">
+  Custom domain to use in the returned URL. Can be comma-separated for random selection. Must be in the server's allowed domains list.
+</ParamField>
+
+<ParamField header="X-Zipline-No-JSON" type="string">
+  When set to `true`, returns the URL as plain text instead of JSON.
+</ParamField>
+
+## Response
+
+Returns the created URL object with the full shortened URL.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the shortened URL
+</ResponseField>
+
+<ResponseField name="code" type="string" required>
+  Random code generated for the URL
+</ResponseField>
+
+<ResponseField name="vanity" type="string | null">
+  Custom vanity string, if set
+</ResponseField>
+
+<ResponseField name="destination" type="string" required>
+  The destination URL
+</ResponseField>
+
+<ResponseField name="views" type="number" required>
+  Number of views (will be 0 for new URLs)
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum number of views before the URL is disabled
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean" required>
+  Whether the URL is currently active
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the URL was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp of when the URL was last updated
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  ID of the user who created this URL
+</ResponseField>
+
+<ResponseField name="url" type="string" required>
+  The full shortened URL that can be shared
+</ResponseField>
+
+## Example Request
+
+```bash Basic URL shortening
+curl -X POST "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://github.com/diced/zipline"
+  }'
+```
+
+```bash Custom vanity URL
+curl -X POST "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://zipline.diced.sh/docs",
+    "vanity": "docs"
+  }'
+```
+
+```bash With max views
+curl -X POST "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -H "X-Zipline-Max-Views: 100" \
+  -d '{
+    "destination": "https://example.com/temporary"
+  }'
+```
+
+```bash Password protected
+curl -X POST "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -H "X-Zipline-Password: secret123" \
+  -d '{
+    "destination": "https://example.com/private"
+  }'
+```
+
+```bash Custom domain
+curl -X POST "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -H "X-Zipline-Domain: short.example.com" \
+  -d '{
+    "destination": "https://example.com/page"
+  }'
+```
+
+```bash Plain text response
+curl -X POST "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -H "X-Zipline-No-JSON: true" \
+  -d '{
+    "destination": "https://example.com"
+  }'
+```
+
+```bash Disabled URL
+curl -X POST "https://your-zipline-instance.com/api/user/urls" \
+  -H "Authorization: your-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "https://example.com",
+    "enabled": false
+  }'
+```
+
+## Example Response
+
+```json 200 OK - JSON response
+{
+  "id": "clx1234567890",
+  "code": "abc123",
+  "vanity": null,
+  "destination": "https://github.com/diced/zipline",
+  "views": 0,
+  "maxViews": null,
+  "enabled": true,
+  "createdAt": "2024-03-01T10:30:00.000Z",
+  "updatedAt": "2024-03-01T10:30:00.000Z",
+  "userId": "user123",
+  "url": "https://your-zipline-instance.com/go/abc123"
+}
+```
+
+```json 200 OK - With vanity
+{
+  "id": "clx0987654321",
+  "code": "xyz789",
+  "vanity": "docs",
+  "destination": "https://zipline.diced.sh/docs",
+  "views": 0,
+  "maxViews": null,
+  "enabled": true,
+  "createdAt": "2024-03-01T10:35:00.000Z",
+  "updatedAt": "2024-03-01T10:35:00.000Z",
+  "userId": "user123",
+  "url": "https://your-zipline-instance.com/go/docs"
+}
+```
+
+```text 200 OK - Plain text response
+https://your-zipline-instance.com/go/abc123
+```
+
+```json 400 Bad Request - Destination required
+{
+  "error": "Bad Request",
+  "message": "Destination is required",
+  "statusCode": 400
+}
+```
+
+```json 400 Bad Request - Vanity taken
+{
+  "error": "Bad Request",
+  "message": "Vanity already taken",
+  "statusCode": 400
+}
+```
+
+```json 403 Forbidden - Quota exceeded
+{
+  "error": "Forbidden",
+  "message": "Shortening this URL would exceed your quota of 100 URLs.",
+  "statusCode": 403
+}
+```
+
+## URL Structure
+
+The returned URL follows this pattern:
+
+```
+{protocol}://{domain}{route}/{vanity || code}
+```
+
+- **protocol**: `http` or `https` based on server configuration
+- **domain**: Your Zipline instance domain or custom domain from header
+- **route**: Configured URL route (default: `/go`)
+- **vanity or code**: Your custom vanity string or the auto-generated code
+
+## Notes
+
+- Random codes are generated with the length configured in server settings (default: 6 characters)
+- Vanity URLs are checked for uniqueness - you'll get an error if the vanity is already taken
+- Passwords are hashed before storage and never returned in responses
+- If your quota is set, creating URLs that exceed your limit will fail
+- The URL uses the vanity string if provided, otherwise falls back to the random code
+- Custom domains must be in the server's allowed domains list
+- Multiple domains can be provided in `X-Zipline-Domain` header (comma-separated) for random selection

@@ -1,0 +1,158 @@
+---
+title: Register
+description: Create a new user account
+---
+
+## POST /api/auth/register
+
+Registers a new user account with username and password credentials. Supports optional invite codes when invites are enabled.
+
+### Request Body
+
+<ParamField body="username" type="string" required>
+  Desired username (trimmed, minimum 1 character). Must be unique.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password (trimmed, minimum 1 character)
+</ParamField>
+
+<ParamField body="code" type="string">
+  Invite code. Required when invites are enabled and user registration is disabled.
+</ParamField>
+
+### Headers
+
+<ParamField header="x-zipline-client" type="string">
+  Optional client identifier for tracking the source of the request
+</ParamField>
+
+### Response
+
+<ResponseField name="user" type="object">
+  The newly created user object
+  
+  <Expandable title="User object properties">
+    <ResponseField name="id" type="string">
+      Unique user identifier
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      The user's username
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role (new users are assigned `USER` role)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of account creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last account update
+    </ResponseField>
+    
+    <ResponseField name="view" type="object">
+      User view settings and preferences (empty by default)
+    </ResponseField>
+    
+    <ResponseField name="oauthProviders" type="array">
+      Array of connected OAuth providers (empty for new accounts)
+    </ResponseField>
+    
+    <ResponseField name="totpSecret" type="string | null">
+      TOTP secret (null for new accounts)
+    </ResponseField>
+    
+    <ResponseField name="quota" type="object | null">
+      User quota settings
+    </ResponseField>
+    
+    <ResponseField name="avatar" type="string | null">
+      User avatar URL or data URI (null for new accounts)
+    </ResponseField>
+    
+    <ResponseField name="token" type="string">
+      API authentication token
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Rate Limiting
+
+This endpoint is rate limited to **5 requests per second**.
+
+### Registration Modes
+
+The server can be configured in different registration modes:
+
+1. **Open registration**: Users can register without an invite code
+2. **Invite-only**: Users must provide a valid invite `code`
+3. **Registration disabled**: No new registrations allowed
+
+### Invite Code Validation
+
+When an invite code is provided:
+- Code is matched against invite ID or code string
+- Checks expiration date (if set)
+- Checks maximum uses (if set)
+- Increments usage counter on successful registration
+
+### Error Responses
+
+- `400 Bad Request` - Invites aren't enabled (when code is provided but invites are disabled)
+- `400 Bad Request` - User registration is disabled (when no code and registration disabled)
+- `400 Bad Request` - Username is taken
+- `400 Bad Request` - Invalid invite code (expired, max uses reached, or doesn't exist)
+- `429 Too Many Requests` - Rate limit exceeded
+
+### Example Request (Open Registration)
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "securepassword123"
+  }'
+```
+
+### Example Request (With Invite Code)
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "securepassword123",
+    "code": "invite-abc-123"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "user": {
+    "id": "clx9876543210",
+    "username": "newuser",
+    "role": "USER",
+    "createdAt": "2024-03-03T12:00:00.000Z",
+    "updatedAt": "2024-03-03T12:00:00.000Z",
+    "view": {},
+    "oauthProviders": [],
+    "totpSecret": null,
+    "quota": null,
+    "avatar": null,
+    "token": "zpl_xyz789abc123def456"
+  }
+}
+```
+
+### Notes
+
+- Successfully registers the user and creates a session automatically
+- Generates a unique API token for the new user
+- Password is hashed using secure hashing before storage
+- New users are assigned the `USER` role by default

@@ -1,0 +1,102 @@
+---
+title: API Token
+description: Retrieve and regenerate your API authentication token
+---
+
+## Get Token
+
+<Card title="GET /api/user/token" icon="key">
+  Retrieve your encrypted API token for uploading files and accessing the API.
+</Card>
+
+### Request
+
+```bash
+curl -X GET https://your-zipline.com/api/user/token \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Cookie: zipline_token=YOUR_SESSION_TOKEN"
+```
+
+### Response
+
+<ResponseField name="token" type="string">
+  Encrypted API token string. Use this token in the `Authorization` header for API requests.
+</ResponseField>
+
+```json Example Response
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+<Note>
+  The token is encrypted using the server's secret key. This is the token you should use for ShareX, uploaders, and other integrations.
+</Note>
+
+---
+
+## Reset Token
+
+<Card title="PATCH /api/user/token" icon="rotate">
+  Generate a new API token. **Warning: This will invalidate your existing token and break any integrations using it.**
+</Card>
+
+### Request
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/token \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Cookie: zipline_token=YOUR_SESSION_TOKEN"
+```
+
+### Response
+
+<ResponseField name="user" type="object">
+  Updated user object with the new token
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      User ID
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Username
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role
+    </ResponseField>
+    
+    <ResponseField name="token" type="string">
+      Raw token value (internal use)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Encrypted token string for API authentication
+</ResponseField>
+
+```json Example Response
+{
+  "user": {
+    "id": "clxxx123456789",
+    "username": "john_doe",
+    "role": "USER",
+    "token": "abc123xyz..."
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+### Rate Limiting
+
+This endpoint is rate-limited to **1 request per second** to prevent token cycling abuse.
+
+<Warning>
+  Resetting your token will immediately invalidate the old token. You'll need to update the token in:
+  - ShareX configurations
+  - Browser extensions
+  - CLI tools
+  - Any other integrations
+</Warning>

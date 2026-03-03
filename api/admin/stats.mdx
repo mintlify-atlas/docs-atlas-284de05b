@@ -1,0 +1,238 @@
+---
+title: Server Statistics
+description: View server-wide metrics and analytics
+---
+
+<Warning>
+  **Authentication Required**: Requires authentication. Admin-only access depends on `featuresMetricsAdminOnly` setting.
+</Warning>
+
+## Get Server Metrics
+
+<Card title="GET /api/stats" icon="chart-line">
+  Retrieve server metrics data for analytics and monitoring.
+</Card>
+
+### Request
+
+<ParamField query="from" type="string" optional>
+  Start date for metrics range (ISO 8601 format). Defaults to 7 days ago.
+</ParamField>
+
+<ParamField query="to" type="string" optional>
+  End date for metrics range (ISO 8601 format). Defaults to current time.
+</ParamField>
+
+<ParamField query="all" type="boolean" default="false">
+  Retrieve all metrics without date filtering
+</ParamField>
+
+```bash Get last 7 days of metrics (default)
+curl -X GET https://your-zipline.com/api/stats \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+```bash Get metrics for specific date range
+curl -X GET "https://your-zipline.com/api/stats?from=2024-03-01T00:00:00Z&to=2024-03-15T23:59:59Z" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+```bash Get all metrics
+curl -X GET "https://your-zipline.com/api/stats?all=true" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Response
+
+Returns an array of metric objects ordered by creation date (most recent first).
+
+<ResponseField name="id" type="string">
+  Unique metric entry ID
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when metric was recorded
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when metric was last updated
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Metric data payload
+  
+  <Expandable title="properties">
+    <ResponseField name="filesTotal" type="number">
+      Total files in the system
+    </ResponseField>
+    
+    <ResponseField name="filesSize" type="number">
+      Total storage used in bytes
+    </ResponseField>
+    
+    <ResponseField name="filesUsers" type="array">
+      Per-user file statistics (hidden if `featuresMetricsShowUserSpecific` is false)
+      
+      <Expandable title="user object">
+        <ResponseField name="userId" type="string">
+          User ID
+        </ResponseField>
+        
+        <ResponseField name="count" type="number">
+          Number of files owned by user
+        </ResponseField>
+        
+        <ResponseField name="size" type="number">
+          Total size of user's files in bytes
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="urlsTotal" type="number">
+      Total shortened URLs in the system
+    </ResponseField>
+    
+    <ResponseField name="urlsUsers" type="array">
+      Per-user URL statistics (hidden if `featuresMetricsShowUserSpecific` is false)
+      
+      <Expandable title="user object">
+        <ResponseField name="userId" type="string">
+          User ID
+        </ResponseField>
+        
+        <ResponseField name="count" type="number">
+          Number of URLs owned by user
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="usersTotal" type="number">
+      Total number of users
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json Example Response
+[
+  {
+    "id": "clmet123456789",
+    "createdAt": "2024-03-15T12:00:00.000Z",
+    "updatedAt": "2024-03-15T12:00:00.000Z",
+    "data": {
+      "filesTotal": 1542,
+      "filesSize": 52487634944,
+      "filesUsers": [
+        {
+          "userId": "clxxx123456789",
+          "count": 234,
+          "size": 8589934592
+        },
+        {
+          "userId": "clxxx987654321",
+          "count": 156,
+          "size": 4294967296
+        }
+      ],
+      "urlsTotal": 89,
+      "urlsUsers": [
+        {
+          "userId": "clxxx123456789",
+          "count": 45
+        },
+        {
+          "userId": "clxxx987654321",
+          "count": 23
+        }
+      ],
+      "usersTotal": 12
+    }
+  },
+  {
+    "id": "clmet111222333",
+    "createdAt": "2024-03-15T11:30:00.000Z",
+    "updatedAt": "2024-03-15T11:30:00.000Z",
+    "data": {
+      "filesTotal": 1538,
+      "filesSize": 52113678336,
+      "filesUsers": [],
+      "urlsTotal": 88,
+      "urlsUsers": [],
+      "usersTotal": 12
+    }
+  }
+]
+```
+
+### Access Control
+
+- **Metrics Disabled**: If `featuresMetricsEnabled` is `false`, returns 403 Forbidden
+- **Admin Only**: If `featuresMetricsAdminOnly` is `true`, only admins can access this endpoint
+- **User-Specific Data**: If `featuresMetricsShowUserSpecific` is `false`, `filesUsers` and `urlsUsers` arrays are empty
+
+### Errors
+
+- **400 Bad Request**: Invalid date format or `from` date is after `to` date
+- **403 Forbidden**: Metrics disabled or admin-only mode without admin privileges
+
+```json Example Errors
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "message": "metrics are disabled"
+}
+```
+
+```json
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "message": "admin only"
+}
+```
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "from date must be before to date"
+}
+```
+
+---
+
+## Metrics Collection
+
+Metrics are automatically collected at the interval specified by `tasksMetricsInterval` (default: 30 minutes). Each collection creates a new metric entry with a snapshot of current server statistics.
+
+### Storage Calculation
+
+The `filesSize` field represents the sum of all file sizes in bytes. To convert:
+
+```javascript
+const GB = data.filesSize / 1024 / 1024 / 1024;
+const TB = data.filesSize / 1024 / 1024 / 1024 / 1024;
+```
+
+### Date Filtering
+
+By default, the endpoint returns metrics from the last 7 days. Use `from` and `to` parameters for custom ranges:
+
+```bash Last 30 days
+curl -X GET "https://your-zipline.com/api/stats?from=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Privacy Considerations
+
+If `featuresMetricsShowUserSpecific` is disabled:
+- `filesUsers` and `urlsUsers` arrays are emptied
+- Only aggregate totals are available
+- Useful for privacy-focused instances
+
+<Tip>
+  Use metrics data to:
+  - Monitor storage growth over time
+  - Track user activity and engagement
+  - Plan capacity and resource allocation
+  - Generate usage reports and analytics dashboards
+</Tip>

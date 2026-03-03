@@ -1,0 +1,353 @@
+---
+title: Custom Themes
+description: Customize Zipline's appearance with built-in themes or create your own custom themes
+---
+
+Zipline features a powerful theming system that allows you to customize the entire user interface. Choose from built-in themes or create your own custom themes using JSON configuration files.
+
+## Built-in Themes
+
+Zipline includes 12 built-in themes:
+
+### Neutral Themes
+- **Dark Gray** - Default dark theme
+- **Light Gray** - Default light theme
+- **Black Dark** - Pure black dark theme
+
+### Blue Themes
+- **Light Blue** - Light blue color scheme
+- **Dark Blue** - Dark blue color scheme
+
+### Catppuccin Themes
+- **Catppuccin Frappé** - Warm, pastel dark theme
+- **Catppuccin Latte** - Light, warm theme
+- **Catppuccin Macchiato** - Dark, rich theme
+- **Catppuccin Mocha** - Deep, cozy dark theme
+
+### Midnight Themes
+- **Midnight Orange** - Dark theme with orange accents
+- **Midnight Blue** - Dark theme with blue accents
+- **Midnight Purple** - Dark theme with purple accents
+
+## Theme Configuration
+
+Configure which themes are available in your database:
+
+```prisma
+model Zipline {
+  websiteThemeDefault String @default("system")
+  websiteThemeDark    String @default("builtin:dark_gray")
+  websiteThemeLight   String @default("builtin:light_gray")
+}
+```
+
+- **websiteThemeDefault**: Default theme selection ("system", "dark", or "light")
+- **websiteThemeDark**: Which theme to use in dark mode
+- **websiteThemeLight**: Which theme to use in light mode
+
+## Creating Custom Themes
+
+Custom themes are JSON files placed in the `themes/` directory at the root of your Zipline installation.
+
+### Theme File Structure
+
+<Steps>
+  <Step title="Create Theme File">
+    Create a new file in `themes/` with the `.theme.json` extension:
+    ```bash
+    themes/my-custom-theme.theme.json
+    ```
+  </Step>
+  
+  <Step title="Define Theme Properties">
+    Create a JSON file with theme configuration (see structure below).
+  </Step>
+  
+  <Step title="Restart Zipline">
+    Restart the Zipline server to load the new theme.
+  </Step>
+  
+  <Step title="Select Theme">
+    The theme will appear in the theme selector in user settings.
+  </Step>
+</Steps>
+
+### Theme JSON Structure
+
+```json
+{
+  "name": "My Custom Theme",
+  "colorScheme": "dark",
+  "primaryColor": "blue",
+  "mainBackgroundColor": "#1a1a1a",
+  "colors": {
+    "blue": [
+      "#e3f2ff",
+      "#bfdbfe",
+      "#93c5fd",
+      "#60a5fa",
+      "#3b82f6",
+      "#2563eb",
+      "#1d4ed8",
+      "#1e40af",
+      "#1e3a8a",
+      "#1e3a8a"
+    ],
+    "gray": [
+      "#f9fafb",
+      "#f3f4f6",
+      "#e5e7eb",
+      "#d1d5db",
+      "#9ca3af",
+      "#6b7280",
+      "#4b5563",
+      "#374151",
+      "#1f2937",
+      "#111827"
+    ]
+  },
+  "extraCss": ".custom-class { color: red; }"
+}
+```
+
+### Theme Properties
+
+<ResponseField name="name" type="string" required>
+  Display name shown in the theme selector
+</ResponseField>
+
+<ResponseField name="colorScheme" type="string" required>
+  Either `"dark"` or `"light"` - determines the base color scheme
+</ResponseField>
+
+<ResponseField name="primaryColor" type="string" required>
+  The primary color key from the colors object (e.g., "blue", "red")
+</ResponseField>
+
+<ResponseField name="mainBackgroundColor" type="string" required>
+  The main background color for the application shell. Can be:
+  - Hex color: `"#1a1a1a"`
+  - CSS color-mix: `"color-mix(in srgb, var(--mantine-color-gray-9), black 45%)"`
+</ResponseField>
+
+<ResponseField name="colors" type="object" required>
+  Color palette with 10 shades for each color (0 = lightest, 9 = darkest)
+</ResponseField>
+
+<ResponseField name="extraCss" type="string">
+  Optional custom CSS to inject into the theme
+</ResponseField>
+
+### OAuth Provider Colors
+
+Themes automatically include OAuth provider colors:
+
+```typescript
+colors: {
+  google: Array(10).fill('#4285F4'),   // Google blue
+  github: Array(10).fill('#24292E'),   // GitHub dark
+  discord: Array(10).fill('#5865F2'),  // Discord blurple
+  oidc: Array(10).fill('#72abcf'),     // Generic OIDC blue
+  // ... your custom colors
+}
+```
+
+These are automatically added if not specified in your theme.
+
+## Theme Loading
+
+The theme loading process is handled in `src/lib/theme/file.ts:27`:
+
+```typescript
+export async function readThemes(): Promise<ZiplineTheme[]> {
+  const themes = await readThemesDir();
+  const parsedThemes = await parseThemes(themes);
+  
+  // Validate mainBackgroundColor
+  for (let i = 0; i !== parsedThemes.length; ++i) {
+    const theme = parsedThemes[i];
+    if (!theme.mainBackgroundColor) {
+      logger.error(
+        `Theme ${theme.id} is missing mainBackgroundColor property`
+      );
+      
+      theme.mainBackgroundColor =
+        theme.colorScheme === 'light'
+          ? 'color-mix(in srgb, var(--mantine-color-white), black 3%)'
+          : 'color-mix(in srgb, var(--mantine-color-gray-9), black 45%)';
+    }
+    
+    parsedThemes[i] = handleOverrideColors(parsedThemes[i]);
+  }
+  
+  // Add built-in themes
+  parsedThemes.push(
+    handleOverrideColors(dark_gray as ZiplineTheme),
+    handleOverrideColors(light_gray as unknown as ZiplineTheme),
+    // ... more built-in themes
+  );
+  
+  return parsedThemes;
+}
+```
+
+## Theme Components
+
+The theming system integrates with Mantine UI components:
+
+```typescript
+export function themeComponents(theme: ZiplineTheme): MantineThemeOverride {
+  return {
+    ...theme,
+    variantColorResolver: variantColorResolver,
+    components: {
+      AppShell: AppShell.extend({
+        styles: {
+          main: {
+            backgroundColor: theme.mainBackgroundColor,
+          },
+        },
+      }),
+      LoadingOverlay: LoadingOverlay.extend({
+        defaultProps: {
+          overlayProps: { blur: 6 },
+        },
+      }),
+      Modal: Modal.extend({
+        defaultProps: {
+          closeButtonProps: { size: 'lg' },
+          centered: true,
+          overlayProps: { blur: 6 },
+        },
+      }),
+    },
+  };
+}
+```
+
+## Example: Creating a Custom Theme
+
+Here's a complete example of a custom "Sunset" theme:
+
+```json
+{
+  "name": "Sunset",
+  "colorScheme": "dark",
+  "primaryColor": "orange",
+  "mainBackgroundColor": "#1a0f0f",
+  "colors": {
+    "orange": [
+      "#fff7ed",
+      "#ffedd5",
+      "#fed7aa",
+      "#fdba74",
+      "#fb923c",
+      "#f97316",
+      "#ea580c",
+      "#c2410c",
+      "#9a3412",
+      "#7c2d12"
+    ],
+    "gray": [
+      "#f9fafb",
+      "#f3f4f6",
+      "#e5e7eb",
+      "#d1d5db",
+      "#9ca3af",
+      "#6b7280",
+      "#4b5563",
+      "#374151",
+      "#1f2937",
+      "#111827"
+    ],
+    "red": [
+      "#fef2f2",
+      "#fee2e2",
+      "#fecaca",
+      "#fca5a5",
+      "#f87171",
+      "#ef4444",
+      "#dc2626",
+      "#b91c1c",
+      "#991b1b",
+      "#7f1d1d"
+    ]
+  },
+  "extraCss": ".navbar { border-color: #ea580c !important; }"
+}
+```
+
+Save this as `themes/sunset.theme.json` and restart Zipline.
+
+## Color Palette Guidelines
+
+<Note>
+When creating custom themes, follow these guidelines:
+
+- **10 shades**: Each color must have exactly 10 shades (index 0-9)
+- **Lightest to darkest**: Index 0 is lightest, index 9 is darkest
+- **Consistent steps**: Try to maintain consistent brightness steps between shades
+- **Accessibility**: Ensure sufficient contrast for text readability
+- **Testing**: Test your theme in both light and dark system modes
+</Note>
+
+## Advanced Customization
+
+### Using CSS Variables
+
+You can use Mantine CSS variables in your theme:
+
+```json
+{
+  "mainBackgroundColor": "color-mix(in srgb, var(--mantine-color-gray-9), black 45%)"
+}
+```
+
+### Custom CSS Injection
+
+Use the `extraCss` field to add custom styles:
+
+```json
+{
+  "extraCss": "
+    .upload-button { 
+      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    }
+    .file-card:hover {
+      transform: scale(1.05);
+      transition: transform 0.2s;
+    }
+  "
+}
+```
+
+## Troubleshooting
+
+### Theme Not Appearing
+
+1. Check the file is in the `themes/` directory
+2. Ensure the filename ends with `.theme.json`
+3. Verify the JSON is valid (use a JSON validator)
+4. Restart the Zipline server
+5. Check server logs for theme loading errors
+
+### Theme Looks Broken
+
+- Verify `mainBackgroundColor` is set
+- Ensure all color arrays have exactly 10 values
+- Check that `colorScheme` is either "dark" or "light"
+- Validate that `primaryColor` matches a key in `colors`
+
+### Colors Not Showing Correctly
+
+- Use hex color format: `#rrggbb`
+- Ensure color values are strings, not numbers
+- Check that shades are ordered from light to dark
+- Test contrast ratios for accessibility
+
+### Custom CSS Not Working
+
+- Ensure CSS is valid
+- Use `!important` if needed to override default styles
+- Check browser console for CSS errors
+- Verify selectors match actual DOM elements

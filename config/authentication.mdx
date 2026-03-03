@@ -1,0 +1,428 @@
+---
+title: Authentication Configuration
+description: Configure OAuth providers, multi-factor authentication, and user registration options
+---
+
+Zipline supports multiple authentication methods including local authentication, OAuth providers, TOTP-based 2FA, and passkeys.
+
+## User Registration
+
+<ParamField path="FEATURES_USER_REGISTRATION" type="boolean" default="false">
+  Allow users to create new accounts via the registration page.
+  
+  ```bash
+  FEATURES_USER_REGISTRATION=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_OAUTH_REGISTRATION" type="boolean" default="false">
+  Allow users to register using OAuth providers.
+  
+  ```bash
+  FEATURES_OAUTH_REGISTRATION=true
+  ```
+</ParamField>
+
+<Note>
+  When both registration options are disabled, new users can only be created via invites or by administrators.
+</Note>
+
+## OAuth Configuration
+
+Zipline supports OAuth authentication with Discord, GitHub, Google, and generic OIDC providers.
+
+### OAuth Settings
+
+<ParamField path="OAUTH_BYPASS_LOCAL_LOGIN" type="boolean" default="false">
+  Hide the local login form and only show OAuth buttons on the login page.
+  
+  ```bash
+  OAUTH_BYPASS_LOCAL_LOGIN=true
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_LOGIN_ONLY" type="boolean" default="false">
+  Disable OAuth registration, only allow existing users to login via OAuth.
+  
+  ```bash
+  OAUTH_LOGIN_ONLY=true
+  ```
+</ParamField>
+
+### Discord OAuth
+
+<ParamField path="OAUTH_DISCORD_CLIENT_ID" type="string">
+  Discord application client ID.
+  
+  ```bash
+  OAUTH_DISCORD_CLIENT_ID=123456789012345678
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_DISCORD_CLIENT_SECRET" type="string">
+  Discord application client secret.
+  
+  ```bash
+  OAUTH_DISCORD_CLIENT_SECRET=your-discord-client-secret
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_DISCORD_REDIRECT_URI" type="string" default="null">
+  Discord OAuth redirect URI. If not set, Zipline will auto-generate based on the request URL.
+  
+  ```bash
+  OAUTH_DISCORD_REDIRECT_URI=https://zipline.example.com/api/auth/oauth/discord
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_DISCORD_ALLOWED_IDS" type="string[]" default="[]">
+  Comma-separated list of Discord user IDs that are allowed to authenticate. If empty, all users are allowed.
+  
+  ```bash
+  OAUTH_DISCORD_ALLOWED_IDS=123456789012345678,987654321098765432
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_DISCORD_DENIED_IDS" type="string[]" default="[]">
+  Comma-separated list of Discord user IDs that are explicitly denied authentication.
+  
+  ```bash
+  OAUTH_DISCORD_DENIED_IDS=111111111111111111,222222222222222222
+  ```
+</ParamField>
+
+#### Discord Setup
+
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application
+3. Navigate to OAuth2 settings
+4. Add redirect URL: `https://your-domain.com/api/auth/oauth/discord`
+5. Copy Client ID and Client Secret
+6. Set the environment variables
+
+### GitHub OAuth
+
+<ParamField path="OAUTH_GITHUB_CLIENT_ID" type="string">
+  GitHub OAuth application client ID.
+  
+  ```bash
+  OAUTH_GITHUB_CLIENT_ID=Iv1.abcdef1234567890
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_GITHUB_CLIENT_SECRET" type="string">
+  GitHub OAuth application client secret.
+  
+  ```bash
+  OAUTH_GITHUB_CLIENT_SECRET=your-github-client-secret
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_GITHUB_REDIRECT_URI" type="string" default="null">
+  GitHub OAuth redirect URI. If not set, auto-generated.
+  
+  ```bash
+  OAUTH_GITHUB_REDIRECT_URI=https://zipline.example.com/api/auth/oauth/github
+  ```
+</ParamField>
+
+#### GitHub Setup
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Create a new OAuth App
+3. Set Homepage URL to your Zipline instance
+4. Set Authorization callback URL: `https://your-domain.com/api/auth/oauth/github`
+5. Copy Client ID and generate a Client Secret
+6. Set the environment variables
+
+### Google OAuth
+
+<ParamField path="OAUTH_GOOGLE_CLIENT_ID" type="string">
+  Google OAuth 2.0 client ID.
+  
+  ```bash
+  OAUTH_GOOGLE_CLIENT_ID=123456789012-abcdefghijklmnop.apps.googleusercontent.com
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_GOOGLE_CLIENT_SECRET" type="string">
+  Google OAuth 2.0 client secret.
+  
+  ```bash
+  OAUTH_GOOGLE_CLIENT_SECRET=your-google-client-secret
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_GOOGLE_REDIRECT_URI" type="string" default="null">
+  Google OAuth redirect URI. If not set, auto-generated.
+  
+  ```bash
+  OAUTH_GOOGLE_REDIRECT_URI=https://zipline.example.com/api/auth/oauth/google
+  ```
+</ParamField>
+
+#### Google Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable Google+ API
+4. Go to Credentials → Create OAuth 2.0 Client ID
+5. Set application type to "Web application"
+6. Add authorized redirect URI: `https://your-domain.com/api/auth/oauth/google`
+7. Copy Client ID and Client Secret
+8. Set the environment variables
+
+### Generic OIDC Provider
+
+For custom OpenID Connect providers (Keycloak, Auth0, Okta, etc.).
+
+<ParamField path="OAUTH_OIDC_CLIENT_ID" type="string">
+  OIDC client ID.
+  
+  ```bash
+  OAUTH_OIDC_CLIENT_ID=zipline-client
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_OIDC_CLIENT_SECRET" type="string">
+  OIDC client secret.
+  
+  ```bash
+  OAUTH_OIDC_CLIENT_SECRET=your-oidc-client-secret
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_OIDC_AUTHORIZE_URL" type="string">
+  OIDC authorization endpoint URL.
+  
+  ```bash
+  OAUTH_OIDC_AUTHORIZE_URL=https://auth.example.com/realms/master/protocol/openid-connect/auth
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_OIDC_TOKEN_URL" type="string">
+  OIDC token endpoint URL.
+  
+  ```bash
+  OAUTH_OIDC_TOKEN_URL=https://auth.example.com/realms/master/protocol/openid-connect/token
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_OIDC_USERINFO_URL" type="string">
+  OIDC userinfo endpoint URL.
+  
+  ```bash
+  OAUTH_OIDC_USERINFO_URL=https://auth.example.com/realms/master/protocol/openid-connect/userinfo
+  ```
+</ParamField>
+
+<ParamField path="OAUTH_OIDC_REDIRECT_URI" type="string" default="null">
+  OIDC redirect URI. If not set, auto-generated.
+  
+  ```bash
+  OAUTH_OIDC_REDIRECT_URI=https://zipline.example.com/api/auth/oauth/oidc
+  ```
+</ParamField>
+
+#### OIDC Setup Examples
+
+<AccordionGroup>
+  <Accordion title="Keycloak" icon="key">
+    ```bash
+    OAUTH_OIDC_CLIENT_ID=zipline
+    OAUTH_OIDC_CLIENT_SECRET=your-client-secret
+    OAUTH_OIDC_AUTHORIZE_URL=https://keycloak.example.com/realms/myrealm/protocol/openid-connect/auth
+    OAUTH_OIDC_TOKEN_URL=https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token
+    OAUTH_OIDC_USERINFO_URL=https://keycloak.example.com/realms/myrealm/protocol/openid-connect/userinfo
+    ```
+  </Accordion>
+  
+  <Accordion title="Auth0" icon="lock">
+    ```bash
+    OAUTH_OIDC_CLIENT_ID=your-auth0-client-id
+    OAUTH_OIDC_CLIENT_SECRET=your-auth0-client-secret
+    OAUTH_OIDC_AUTHORIZE_URL=https://your-tenant.auth0.com/authorize
+    OAUTH_OIDC_TOKEN_URL=https://your-tenant.auth0.com/oauth/token
+    OAUTH_OIDC_USERINFO_URL=https://your-tenant.auth0.com/userinfo
+    ```
+  </Accordion>
+  
+  <Accordion title="Authentik" icon="shield">
+    ```bash
+    OAUTH_OIDC_CLIENT_ID=zipline
+    OAUTH_OIDC_CLIENT_SECRET=your-client-secret
+    OAUTH_OIDC_AUTHORIZE_URL=https://authentik.example.com/application/o/authorize/
+    OAUTH_OIDC_TOKEN_URL=https://authentik.example.com/application/o/token/
+    OAUTH_OIDC_USERINFO_URL=https://authentik.example.com/application/o/userinfo/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Multi-Factor Authentication (MFA)
+
+Zipline supports two types of MFA: TOTP (Time-based One-Time Password) and Passkeys (WebAuthn).
+
+### TOTP (2FA)
+
+<ParamField path="MFA_TOTP_ENABLED" type="boolean" default="false">
+  Enable TOTP-based two-factor authentication.
+  
+  ```bash
+  MFA_TOTP_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="MFA_TOTP_ISSUER" type="string" default="Zipline">
+  Issuer name displayed in authenticator apps.
+  
+  ```bash
+  MFA_TOTP_ISSUER=MyZipline
+  ```
+</ParamField>
+
+When enabled, users can:
+
+1. Navigate to their account settings
+2. Enable two-factor authentication
+3. Scan the QR code with an authenticator app (Google Authenticator, Authy, etc.)
+4. Enter the 6-digit code to confirm setup
+
+<Note>
+  TOTP codes are generated using the standard TOTP algorithm (RFC 6238) and are compatible with all major authenticator apps.
+</Note>
+
+### Passkeys (WebAuthn)
+
+<ParamField path="MFA_PASSKEYS_ENABLED" type="boolean" default="false">
+  Enable passkey authentication using WebAuthn.
+  
+  ```bash
+  MFA_PASSKEYS_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="MFA_PASSKEYS_RP_ID" type="string" default="null">
+  Relying Party ID for WebAuthn. Should be your domain name.
+  
+  ```bash
+  MFA_PASSKEYS_RP_ID=zipline.example.com
+  ```
+</ParamField>
+
+<ParamField path="MFA_PASSKEYS_ORIGIN" type="string" default="null">
+  Origin URL for WebAuthn. Must match the URL users access Zipline from.
+  
+  ```bash
+  MFA_PASSKEYS_ORIGIN=https://zipline.example.com
+  ```
+</ParamField>
+
+<Warning>
+  Both `MFA_PASSKEYS_RP_ID` and `MFA_PASSKEYS_ORIGIN` must be set correctly for passkeys to work. The RP ID must be a valid domain that matches the origin.
+</Warning>
+
+#### Passkey Setup Example
+
+```bash
+MFA_PASSKEYS_ENABLED=true
+MFA_PASSKEYS_RP_ID=files.example.com
+MFA_PASSKEYS_ORIGIN=https://files.example.com
+```
+
+Supported authenticators:
+- Hardware security keys (YubiKey, etc.)
+- Platform authenticators (Windows Hello, Touch ID, Face ID)
+- Mobile device biometrics
+
+## Invite System
+
+When user registration is disabled, the invite system controls access.
+
+<ParamField path="INVITES_ENABLED" type="boolean" default="true">
+  Enable the invite system.
+  
+  ```bash
+  INVITES_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="INVITES_LENGTH" type="number" default="6">
+  Length of generated invite codes.
+  
+  ```bash
+  INVITES_LENGTH=8
+  ```
+</ParamField>
+
+Administrators can create invites with:
+- Custom expiration dates
+- Maximum use limits
+- Single-use or multi-use codes
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="OAuth Security" icon="shield-halved">
+    - Always use HTTPS for production deployments
+    - Keep client secrets secure (use environment variables, not config files)
+    - Regularly rotate OAuth client secrets
+    - Use `OAUTH_DISCORD_ALLOWED_IDS` to restrict access when needed
+    - Set specific redirect URIs in provider settings (don't use wildcards)
+  </Accordion>
+  
+  <Accordion title="MFA Recommendations" icon="key">
+    - Enable at least one MFA method for administrators
+    - Encourage users to enable 2FA on their accounts
+    - Keep backup codes secure
+    - Test passkey configuration in multiple browsers
+  </Accordion>
+  
+  <Accordion title="Registration Control" icon="user-lock">
+    - Disable public registration for private instances
+    - Use invite system for controlled access
+    - Enable `OAUTH_LOGIN_ONLY` to prevent OAuth-based registration
+    - Monitor new user registrations
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### OAuth Issues
+
+**Error: "redirect_uri_mismatch"**
+- Ensure redirect URI in provider settings matches exactly
+- Check for trailing slashes
+- Verify HTTPS vs HTTP
+
+**Error: "invalid_client"**
+- Client ID or secret is incorrect
+- Client may be disabled in provider settings
+
+**Users can't register via OAuth**
+- Check `FEATURES_OAUTH_REGISTRATION=true`
+- Verify `OAUTH_LOGIN_ONLY=false`
+
+### MFA Issues
+
+**TOTP codes not working**
+- Ensure server time is synchronized (use NTP)
+- Check that user's device time is correct
+- Verify the issuer name matches
+
+**Passkeys not appearing**
+- Verify `MFA_PASSKEYS_ENABLED=true`
+- Check `MFA_PASSKEYS_RP_ID` matches your domain
+- Ensure `MFA_PASSKEYS_ORIGIN` includes protocol (https://)
+- Browser must support WebAuthn
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Security Configuration" icon="shield" href="/config/security">
+    Rate limiting and security settings
+  </Card>
+  
+  <Card title="Customization" icon="palette" href="/config/customization">
+    Website branding and themes
+  </Card>
+</CardGroup>

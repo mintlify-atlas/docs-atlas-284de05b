@@ -1,0 +1,194 @@
+---
+title: 'ShareX Integration'
+description: 'Configure ShareX to upload files and screenshots to your Zipline server'
+icon: 'upload'
+---
+
+ShareX is a popular Windows screenshot and file sharing tool. Zipline has built-in support for ShareX, making it easy to upload screenshots, files, and create short URLs directly from your desktop.
+
+## Prerequisites
+
+- A running Zipline instance
+- [ShareX](https://getsharex.com/) installed on your Windows machine
+- A Zipline user account with an API token
+
+## Getting Your API Token
+
+<Steps>
+  <Step title="Log in to Zipline">
+    Navigate to your Zipline instance and log in to your account.
+  </Step>
+  
+  <Step title="Access User Settings">
+    Click on your profile icon and navigate to **Settings**.
+  </Step>
+  
+  <Step title="Generate Config">
+    In the Settings page, find the **Generators** section. Click on the **ShareX** option to download a pre-configured `.sxcu` file.
+  </Step>
+</Steps>
+
+<Note>
+  The generated config file includes your API token and all necessary upload settings. Keep this file secure as it contains authentication credentials.
+</Note>
+
+## Manual Configuration
+
+If you prefer to configure ShareX manually, follow these steps:
+
+<Steps>
+  <Step title="Open ShareX Destinations">
+    In ShareX, go to **Destinations** → **Destination settings**.
+  </Step>
+  
+  <Step title="Add Custom Uploader">
+    Navigate to **Custom uploaders** and click **New**.
+  </Step>
+  
+  <Step title="Configure Upload Settings">
+    Set up the uploader with the following configuration:
+  </Step>
+</Steps>
+
+### File Upload Configuration
+
+```json
+{
+  "Version": "17.0.0",
+  "Name": "Zipline - File Upload",
+  "DestinationType": "ImageUploader, TextUploader, FileUploader",
+  "RequestMethod": "POST",
+  "RequestURL": "https://your-zipline-instance.com/api/upload",
+  "Headers": {
+    "authorization": "your-api-token-here"
+  },
+  "Body": "MultipartFormData",
+  "FileFormName": "file",
+  "URL": "{json:files[0].url}"
+}
+```
+
+### URL Shortener Configuration
+
+```json
+{
+  "Version": "17.0.0",
+  "Name": "Zipline - URL Shortener",
+  "DestinationType": "URLShortener, URLSharingService",
+  "RequestMethod": "POST",
+  "RequestURL": "https://your-zipline-instance.com/api/user/urls",
+  "Headers": {
+    "authorization": "your-api-token-here"
+  },
+  "Body": "JSON",
+  "Data": "{\"destination\": \"{input}\"}",
+  "URL": "{json:url}"
+}
+```
+
+<Warning>
+  Replace `https://your-zipline-instance.com` with your actual Zipline server URL and `your-api-token-here` with your API token from Zipline settings.
+</Warning>
+
+## Advanced Options
+
+Zipline supports additional upload options through custom headers:
+
+### Custom Headers
+
+<CodeGroup>
+```json Expiration Time
+{
+  "Headers": {
+    "authorization": "your-token",
+    "x-zipline-deletes-at": "24h"
+  }
+}
+```
+
+```json Image Compression
+{
+  "Headers": {
+    "authorization": "your-token",
+    "x-zipline-image-compression-percent": "80"
+  }
+}
+```
+
+```json Custom Filename Format
+{
+  "Headers": {
+    "authorization": "your-token",
+    "x-zipline-format": "random"
+  }
+}
+```
+
+```json Max Views
+{
+  "Headers": {
+    "authorization": "your-token",
+    "x-zipline-max-views": "10"
+  }
+}
+```
+</CodeGroup>
+
+### Available Headers
+
+| Header | Description | Example Values |
+|--------|-------------|----------------|
+| `x-zipline-deletes-at` | Set file expiration | `24h`, `7d`, `never`, `date=2024-12-31` |
+| `x-zipline-format` | Filename format | `random`, `uuid`, `date`, `name`, `gfycat` |
+| `x-zipline-image-compression-percent` | Image compression quality (0-100) | `80`, `60`, `90` |
+| `x-zipline-max-views` | Maximum views before deletion | `1`, `10`, `100` |
+| `x-zipline-password` | Password protect the file | Any string |
+| `x-zipline-original-name` | Keep original filename | `true`, `false` |
+| `x-zipline-domain` | Custom return domain | `cdn.example.com` |
+
+## XShare Compatibility (Android)
+
+If you're using the XShare app on Android, enable the compatibility option in Zipline's generator settings:
+
+```json
+{
+  "URL": "$json:files[0].url$"
+}
+```
+
+<Tip>
+  This changes the response parsing format to be compatible with XShare's JSON parser.
+</Tip>
+
+## Troubleshooting
+
+### Upload fails with 401 Unauthorized
+
+- Verify your API token is correct
+- Check that the `authorization` header is set properly
+- Ensure your Zipline user account is active
+
+### Upload fails with 413 Payload Too Large
+
+- Check your file size limits in Zipline configuration
+- Verify your user quota hasn't been exceeded
+- Contact your Zipline administrator for increased limits
+
+### Response URL is not captured
+
+For file uploads, ensure the URL pattern is set to:
+- ShareX: `{json:files[0].url}`
+- XShare: `$json:files[0].url$`
+
+For URL shortening, use: `{json:url}`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Documentation" icon="code" href="/api/upload/file">
+    Learn more about the upload API endpoints
+  </Card>
+  <Card title="Flameshot Integration" icon="fire" href="/integrations/flameshot">
+    Set up Flameshot on Linux
+  </Card>
+</CardGroup>

@@ -1,0 +1,161 @@
+---
+title: Get File
+description: Retrieve detailed information about a specific file
+---
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://your-zipline.com/api/user/files/clxyz123" \
+  -H "Authorization: YOUR_TOKEN"
+```
+</RequestExample>
+
+## GET /api/user/files/:id
+
+Retrieve detailed information about a specific file by ID or name.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The file ID or file name to retrieve. Both the unique file ID (`clxyz123`) and the file name on server (`abc123.png`) are accepted.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique file identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  File name on server
+</ResponseField>
+
+<ResponseField name="originalName" type="string | null">
+  Original name of the uploaded file
+</ResponseField>
+
+<ResponseField name="size" type="number">
+  File size in bytes
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  MIME type of the file
+</ResponseField>
+
+<ResponseField name="views" type="number">
+  Number of times the file has been viewed
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum allowed views before deletion. `null` means unlimited.
+</ResponseField>
+
+<ResponseField name="favorite" type="boolean">
+  Whether the file is marked as favorite
+</ResponseField>
+
+<ResponseField name="password" type="boolean">
+  Whether the file is password-protected
+</ResponseField>
+
+<ResponseField name="folderId" type="string | null">
+  ID of the folder containing this file. `null` if not in a folder.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of file creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+<ResponseField name="deletesAt" type="string | null">
+  ISO 8601 timestamp of scheduled deletion. `null` if no deletion is scheduled.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Full URL to access the file
+</ResponseField>
+
+<ResponseField name="thumbnail" type="object | null">
+  Thumbnail information if available
+  
+  <Expandable title="Thumbnail properties">
+    <ResponseField name="path" type="string">
+      Path to the thumbnail file
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="tags" type="array">
+  Array of tag objects associated with this file
+  
+  <Expandable title="Tag properties">
+    <ResponseField name="id" type="string">
+      Tag ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Tag name
+    </ResponseField>
+    
+    <ResponseField name="color" type="string">
+      Tag color as hex code (e.g., `#3b82f6`)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of tag creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of tag last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "id": "clxyz123",
+  "name": "abc123.png",
+  "originalName": "screenshot.png",
+  "size": 152400,
+  "type": "image/png",
+  "views": 42,
+  "maxViews": 100,
+  "favorite": true,
+  "password": false,
+  "folderId": "folder123",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-16T14:20:00.000Z",
+  "deletesAt": "2024-02-15T10:30:00.000Z",
+  "url": "https://your-zipline.com/u/abc123.png",
+  "thumbnail": {
+    "path": "/thumbnails/abc123.jpg"
+  },
+  "tags": [
+    {
+      "id": "tag1",
+      "name": "screenshots",
+      "color": "#3b82f6",
+      "createdAt": "2024-01-10T08:00:00.000Z",
+      "updatedAt": "2024-01-10T08:00:00.000Z"
+    },
+    {
+      "id": "tag2",
+      "name": "work",
+      "color": "#10b981",
+      "createdAt": "2024-01-12T09:15:00.000Z",
+      "updatedAt": "2024-01-12T09:15:00.000Z"
+    }
+  ]
+}
+```
+
+### Error Responses
+
+<ResponseField name="404 Not Found">
+  The file does not exist, or you don't have permission to access it.
+</ResponseField>

@@ -1,0 +1,557 @@
+---
+title: Environment Variables
+description: Complete reference of all Zipline environment variables for configuration
+---
+
+This page documents all environment variables supported by Zipline, organized by category.
+
+## Core Settings
+
+Fundamental server and database configuration.
+
+<ParamField path="CORE_PORT" type="number" default="3000">
+  Port number for the HTTP server.
+  
+  ```bash
+  CORE_PORT=3000
+  ```
+</ParamField>
+
+<ParamField path="CORE_HOSTNAME" type="string" default="0.0.0.0">
+  Hostname or IP address to bind the server to.
+  
+  ```bash
+  CORE_HOSTNAME=0.0.0.0
+  ```
+</ParamField>
+
+<ParamField path="CORE_SECRET" type="string" required>
+  Secret key for session encryption and security. Must be at least 32 characters long.
+  
+  ```bash
+  CORE_SECRET="your-secure-secret-key-min-32-chars"
+  ```
+  
+  <Warning>
+    Never use the default value `changethis`. Generate a secure random string:
+    ```bash
+    openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32
+    ```
+  </Warning>
+</ParamField>
+
+<ParamField path="CORE_TRUST_PROXY" type="boolean" default="false">
+  Enable trust for proxy headers (X-Forwarded-For, X-Forwarded-Proto). Required when behind a reverse proxy.
+  
+  ```bash
+  CORE_TRUST_PROXY=true
+  ```
+</ParamField>
+
+<ParamField path="CORE_RETURN_HTTPS_URLS" type="boolean" default="false">
+  Return HTTPS URLs instead of HTTP when generating file links.
+  
+  ```bash
+  CORE_RETURN_HTTPS_URLS=true
+  ```
+</ParamField>
+
+<ParamField path="CORE_DEFAULT_DOMAIN" type="string" default="null">
+  Default domain to use for generating URLs. If not set, uses the request hostname.
+  
+  ```bash
+  CORE_DEFAULT_DOMAIN=files.example.com
+  ```
+</ParamField>
+
+<ParamField path="CORE_TEMP_DIRECTORY" type="string" default="/tmp/zipline">
+  Directory for temporary files during processing.
+  
+  ```bash
+  CORE_TEMP_DIRECTORY=/var/tmp/zipline
+  ```
+</ParamField>
+
+## Database Configuration
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string. Required unless using individual database variables.
+  
+  ```bash
+  DATABASE_URL=postgresql://user:password@localhost:5432/zipline
+  ```
+</ParamField>
+
+<Note>
+  You can use either `DATABASE_URL` or the individual database variables below. If both are provided, `DATABASE_URL` takes precedence.
+</Note>
+
+<ParamField path="DATABASE_USERNAME" type="string">
+  Database username (alternative to DATABASE_URL).
+</ParamField>
+
+<ParamField path="DATABASE_PASSWORD" type="string">
+  Database password (alternative to DATABASE_URL).
+</ParamField>
+
+<ParamField path="DATABASE_HOST" type="string">
+  Database host (alternative to DATABASE_URL).
+</ParamField>
+
+<ParamField path="DATABASE_PORT" type="number">
+  Database port (alternative to DATABASE_URL).
+</ParamField>
+
+<ParamField path="DATABASE_NAME" type="string">
+  Database name (alternative to DATABASE_URL).
+</ParamField>
+
+<Warning>
+  When using individual database variables, ALL five must be provided (username, password, host, port, name).
+</Warning>
+
+## Datasource Configuration
+
+<ParamField path="DATASOURCE_TYPE" type="string" default="local">
+  Storage backend type. Options: `local`, `s3`.
+  
+  ```bash
+  DATASOURCE_TYPE=local
+  ```
+</ParamField>
+
+### Local Datasource
+
+<ParamField path="DATASOURCE_LOCAL_DIRECTORY" type="string" default="./uploads">
+  Directory path for storing uploaded files when using local datasource.
+  
+  ```bash
+  DATASOURCE_LOCAL_DIRECTORY=/var/lib/zipline/uploads
+  ```
+</ParamField>
+
+### S3 Datasource
+
+<ParamField path="DATASOURCE_S3_ACCESS_KEY_ID" type="string">
+  AWS access key ID or S3-compatible access key.
+  
+  ```bash
+  DATASOURCE_S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_SECRET_ACCESS_KEY" type="string">
+  AWS secret access key or S3-compatible secret key.
+  
+  ```bash
+  DATASOURCE_S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_REGION" type="string">
+  AWS region for S3 bucket.
+  
+  ```bash
+  DATASOURCE_S3_REGION=us-west-2
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_BUCKET" type="string">
+  S3 bucket name for file storage.
+  
+  ```bash
+  DATASOURCE_S3_BUCKET=my-zipline-files
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_ENDPOINT" type="string" default="null">
+  Custom S3 endpoint for S3-compatible services (MinIO, DigitalOcean Spaces, etc.).
+  
+  ```bash
+  DATASOURCE_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_FORCE_PATH_STYLE" type="boolean" default="false">
+  Use path-style URLs instead of virtual-hosted-style. Required for some S3-compatible services.
+  
+  ```bash
+  DATASOURCE_S3_FORCE_PATH_STYLE=true
+  ```
+</ParamField>
+
+<ParamField path="DATASOURCE_S3_SUBDIRECTORY" type="string" default="null">
+  Subdirectory within the bucket to store files.
+  
+  ```bash
+  DATASOURCE_S3_SUBDIRECTORY=zipline-uploads
+  ```
+</ParamField>
+
+<Warning>
+  When `DATASOURCE_TYPE=s3`, all required S3 credentials must be provided (access key, secret key, region, bucket).
+</Warning>
+
+## Chunked Uploads
+
+<ParamField path="CHUNKS_ENABLED" type="boolean" default="true">
+  Enable chunked/multipart uploads for large files.
+  
+  ```bash
+  CHUNKS_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="CHUNKS_MAX" type="string" default="95mb">
+  Maximum size for chunked uploads.
+  
+  ```bash
+  CHUNKS_MAX=100mb
+  ```
+</ParamField>
+
+<ParamField path="CHUNKS_SIZE" type="string" default="25mb">
+  Size of each chunk in multipart uploads.
+  
+  ```bash
+  CHUNKS_SIZE=25mb
+  ```
+</ParamField>
+
+## Background Tasks
+
+Interval settings for background maintenance tasks.
+
+<Note>
+  All interval values use the `ms` format: `30s`, `5m`, `1h`, `1d`, etc. Maximum value is 2147483647ms (~24.8 days).
+</Note>
+
+<ParamField path="TASKS_DELETE_INTERVAL" type="string" default="30m">
+  Interval for checking and deleting expired files.
+  
+  ```bash
+  TASKS_DELETE_INTERVAL=15m
+  ```
+</ParamField>
+
+<ParamField path="TASKS_CLEAR_INVITES_INTERVAL" type="string" default="30m">
+  Interval for clearing expired invites.
+  
+  ```bash
+  TASKS_CLEAR_INVITES_INTERVAL=1h
+  ```
+</ParamField>
+
+<ParamField path="TASKS_MAX_VIEWS_INTERVAL" type="string" default="30m">
+  Interval for checking files that have reached maximum view count.
+  
+  ```bash
+  TASKS_MAX_VIEWS_INTERVAL=10m
+  ```
+</ParamField>
+
+<ParamField path="TASKS_THUMBNAILS_INTERVAL" type="string" default="30m">
+  Interval for generating thumbnails for new uploads.
+  
+  ```bash
+  TASKS_THUMBNAILS_INTERVAL=5m
+  ```
+</ParamField>
+
+<ParamField path="TASKS_METRICS_INTERVAL" type="string" default="30m">
+  Interval for collecting and aggregating metrics.
+  
+  ```bash
+  TASKS_METRICS_INTERVAL=1h
+  ```
+</ParamField>
+
+<ParamField path="TASKS_CLEAN_THUMBNAILS_INTERVAL" type="string" default="1d">
+  Interval for cleaning up orphaned thumbnails.
+  
+  ```bash
+  TASKS_CLEAN_THUMBNAILS_INTERVAL=1d
+  ```
+</ParamField>
+
+## File Upload Settings
+
+<ParamField path="FILES_ROUTE" type="string" default="/u">
+  URL route prefix for uploaded files.
+  
+  ```bash
+  FILES_ROUTE=/f
+  ```
+</ParamField>
+
+<ParamField path="FILES_LENGTH" type="number" default="6">
+  Length of randomly generated file names.
+  
+  ```bash
+  FILES_LENGTH=8
+  ```
+</ParamField>
+
+<ParamField path="FILES_DEFAULT_FORMAT" type="string" default="random">
+  Default naming format for uploaded files. Options: `random`, `date`, `uuid`, `name`, `gfycat`, `random-words`.
+  
+  ```bash
+  FILES_DEFAULT_FORMAT=random
+  ```
+</ParamField>
+
+<ParamField path="FILES_DISABLED_EXTENSIONS" type="string[]" default="[]">
+  Comma-separated list of file extensions to block.
+  
+  ```bash
+  FILES_DISABLED_EXTENSIONS=exe,bat,cmd
+  ```
+</ParamField>
+
+<ParamField path="FILES_MAX_FILE_SIZE" type="string" default="100mb">
+  Maximum file size for uploads.
+  
+  ```bash
+  FILES_MAX_FILE_SIZE=500mb
+  ```
+</ParamField>
+
+<ParamField path="FILES_DEFAULT_EXPIRATION" type="string" default="null">
+  Default expiration time for uploaded files.
+  
+  ```bash
+  FILES_DEFAULT_EXPIRATION=7d
+  ```
+</ParamField>
+
+<ParamField path="FILES_MAX_EXPIRATION" type="string" default="null">
+  Maximum allowed expiration time users can set.
+  
+  ```bash
+  FILES_MAX_EXPIRATION=30d
+  ```
+</ParamField>
+
+<ParamField path="FILES_ASSUME_MIMETYPES" type="boolean" default="false">
+  Assume MIME types from file extensions instead of detecting.
+  
+  ```bash
+  FILES_ASSUME_MIMETYPES=true
+  ```
+</ParamField>
+
+<ParamField path="FILES_DEFAULT_DATE_FORMAT" type="string" default="YYYY-MM-DD_HH:mm:ss">
+  Date format for `date` naming format.
+  
+  ```bash
+  FILES_DEFAULT_DATE_FORMAT=YYYY-MM-DD_HH-mm-ss
+  ```
+</ParamField>
+
+<ParamField path="FILES_REMOVE_GPS_METADATA" type="boolean" default="false">
+  Automatically strip GPS metadata from uploaded images.
+  
+  ```bash
+  FILES_REMOVE_GPS_METADATA=true
+  ```
+</ParamField>
+
+<ParamField path="FILES_RANDOM_WORDS_NUM_ADJECTIVES" type="number" default="2">
+  Number of adjectives in `random-words` naming format.
+  
+  ```bash
+  FILES_RANDOM_WORDS_NUM_ADJECTIVES=3
+  ```
+</ParamField>
+
+<ParamField path="FILES_RANDOM_WORDS_SEPARATOR" type="string" default="-">
+  Separator character for `random-words` naming format.
+  
+  ```bash
+  FILES_RANDOM_WORDS_SEPARATOR=_
+  ```
+</ParamField>
+
+<ParamField path="FILES_DEFAULT_COMPRESSION_FORMAT" type="string" default="jpg">
+  Default image format for compression. Options: `jpg`, `png`, `webp`.
+  
+  ```bash
+  FILES_DEFAULT_COMPRESSION_FORMAT=webp
+  ```
+</ParamField>
+
+## URL Shortener Settings
+
+<ParamField path="URLS_ROUTE" type="string" default="/go">
+  URL route prefix for shortened URLs.
+  
+  ```bash
+  URLS_ROUTE=/s
+  ```
+</ParamField>
+
+<ParamField path="URLS_LENGTH" type="number" default="6">
+  Length of randomly generated short URL codes.
+  
+  ```bash
+  URLS_LENGTH=5
+  ```
+</ParamField>
+
+## Feature Toggles
+
+<ParamField path="FEATURES_IMAGE_COMPRESSION" type="boolean" default="true">
+  Enable image compression features.
+  
+  ```bash
+  FEATURES_IMAGE_COMPRESSION=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_ROBOTS_TXT" type="boolean" default="true">
+  Serve a robots.txt file.
+  
+  ```bash
+  FEATURES_ROBOTS_TXT=false
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_HEALTHCHECK" type="boolean" default="true">
+  Enable the `/api/healthcheck` endpoint.
+  
+  ```bash
+  FEATURES_HEALTHCHECK=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_USER_REGISTRATION" type="boolean" default="false">
+  Allow new user registration.
+  
+  ```bash
+  FEATURES_USER_REGISTRATION=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_OAUTH_REGISTRATION" type="boolean" default="false">
+  Allow registration via OAuth providers.
+  
+  ```bash
+  FEATURES_OAUTH_REGISTRATION=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_DELETE_ON_MAX_VIEWS" type="boolean" default="true">
+  Automatically delete files when they reach maximum view count.
+  
+  ```bash
+  FEATURES_DELETE_ON_MAX_VIEWS=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_VERSION_CHECKING" type="boolean" default="true">
+  Check for new Zipline versions.
+  
+  ```bash
+  FEATURES_VERSION_CHECKING=false
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_VERSION_API" type="string" default="https://zipline-version.diced.sh">
+  API endpoint for version checking.
+  
+  ```bash
+  FEATURES_VERSION_API=https://custom-version-api.example.com
+  ```
+</ParamField>
+
+## Thumbnail Settings
+
+<ParamField path="FEATURES_THUMBNAILS_ENABLED" type="boolean" default="true">
+  Enable automatic thumbnail generation.
+  
+  ```bash
+  FEATURES_THUMBNAILS_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_THUMBNAILS_NUM_THREADS" type="number" default="4">
+  Number of worker threads for thumbnail generation.
+  
+  ```bash
+  FEATURES_THUMBNAILS_NUM_THREADS=8
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_THUMBNAILS_FORMAT" type="string" default="jpg">
+  Output format for thumbnails. Options: `jpg`, `png`, `webp`.
+  
+  ```bash
+  FEATURES_THUMBNAILS_FORMAT=webp
+  ```
+</ParamField>
+
+## Metrics Settings
+
+<ParamField path="FEATURES_METRICS_ENABLED" type="boolean" default="true">
+  Enable metrics collection and analytics.
+  
+  ```bash
+  FEATURES_METRICS_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_METRICS_ADMIN_ONLY" type="boolean" default="false">
+  Restrict metrics viewing to administrators only.
+  
+  ```bash
+  FEATURES_METRICS_ADMIN_ONLY=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURES_METRICS_SHOW_USER_SPECIFIC" type="boolean" default="true">
+  Show user-specific metrics to individual users.
+  
+  ```bash
+  FEATURES_METRICS_SHOW_USER_SPECIFIC=true
+  ```
+</ParamField>
+
+## Domain Configuration
+
+<ParamField path="DOMAINS" type="string[]" default="[]">
+  Comma-separated list of additional domains for multi-domain support.
+  
+  ```bash
+  DOMAINS=files.example.com,uploads.example.com
+  ```
+</ParamField>
+
+## Invite System
+
+<ParamField path="INVITES_ENABLED" type="boolean" default="true">
+  Enable the invite system for user registration.
+  
+  ```bash
+  INVITES_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="INVITES_LENGTH" type="number" default="6">
+  Length of generated invite codes.
+  
+  ```bash
+  INVITES_LENGTH=8
+  ```
+</ParamField>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Datasource Configuration" icon="database" href="/config/datasource">
+    Detailed S3 and local storage setup
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/config/authentication">
+    OAuth providers and MFA configuration
+  </Card>
+</CardGroup>

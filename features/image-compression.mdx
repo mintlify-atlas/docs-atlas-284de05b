@@ -1,0 +1,286 @@
+---
+title: Image Compression
+description: Automatically compress images on upload to save storage space and bandwidth
+---
+
+Zipline can automatically compress images during upload, reducing file sizes while maintaining visual quality. This saves storage space and improves load times for users.
+
+## Overview
+
+Image compression uses the [Sharp](https://sharp.pixelplumbing.com/) library to process and compress images in various formats.
+
+## Configuration
+
+Enable image compression in your database configuration:
+
+```prisma
+model Zipline {
+  featuresImageCompression          Boolean @default(true)
+  filesDefaultCompressionFormat     String? @default("jpg")
+}
+```
+
+- **featuresImageCompression**: Enable/disable image compression globally
+- **filesDefaultCompressionFormat**: Default output format (jpg, png, webp, jxl)
+
+## Supported Formats
+
+Zipline supports compression for the following image formats:
+
+<CardGroup cols={2}>
+  <Card title="JPEG/JPG" icon="image">
+    Lossy compression, best for photos
+  </Card>
+  <Card title="PNG" icon="image">
+    Lossless compression, best for graphics
+  </Card>
+  <Card title="WebP" icon="image">
+    Modern format with superior compression
+  </Card>
+  <Card title="JPEG XL (JXL)" icon="image">
+    Next-gen format with excellent compression
+  </Card>
+</CardGroup>
+
+## How It Works
+
+### Compression Process
+
+<Steps>
+  <Step title="Upload Detection">
+    When an image is uploaded, Zipline detects the file type and checks if compression is enabled.
+  </Step>
+  
+  <Step title="Format Selection">
+    The system selects the target format based on configuration or user preference.
+  </Step>
+  
+  <Step title="Compression">
+    Sharp processes the image, applying quality settings and format conversion.
+  </Step>
+  
+  <Step title="Storage">
+    The compressed image is saved to your datasource, replacing the original.
+  </Step>
+</Steps>
+
+### Implementation Reference
+
+The compression implementation is in `src/lib/compress.ts:29`:
+
+```typescript
+export async function compressFile(
+  filePath: string, 
+  options: CompressOptions
+): Promise<CompressResult> {
+  try {
+    const { quality, type } = options;
+    
+    // Detect animated images
+    const animated = ['.gif', '.webp', '.avif', '.tiff']
+      .includes(extname(filePath).toLowerCase());
+    
+    const image = sharp(filePath, { animated }).withMetadata();
+    
+    let buffer: Buffer;
+    
+    switch (type?.toLowerCase()) {
+      case 'png':
+        buffer = await image.png({ quality }).toBuffer();
+        result.mimetype = 'image/png';
+        result.ext = 'png';
+        break;
+      case 'webp':
+        buffer = await image.webp({ quality }).toBuffer();
+        result.mimetype = 'image/webp';
+        result.ext = 'webp';
+        break;
+      case 'jxl':
+        buffer = await image.jxl({ quality }).toBuffer();
+        result.mimetype = 'image/jxl';
+        result.ext = 'jxl';
+        break;
+      case 'jpg':
+      case 'jpeg':
+      default:
+        buffer = await image.jpeg({ quality }).toBuffer();
+        result.mimetype = 'image/jpeg';
+        result.ext = 'jpg';
+        break;
+    }
+    
+    return { ...result, buffer };
+  } catch (error) {
+    return { failed: true, ... };
+  }
+}
+```
+
+## Compression Quality
+
+The quality parameter controls the compression level:
+
+- **1-20**: Very low quality, maximum compression
+- **20-50**: Low quality, high compression
+- **50-75**: Medium quality, balanced compression
+- **75-90**: High quality, moderate compression
+- **90-100**: Very high quality, minimal compression
+
+<Note>
+Recommended quality settings:
+- **JPEG**: 80-85 for photos
+- **PNG**: 90-95 for graphics
+- **WebP**: 75-80 for balanced quality
+- **JXL**: 85-90 for high-quality compression
+</Note>
+
+## Animated Images
+
+Zipline preserves animation for supported formats:
+
+- Animated GIFs
+- Animated WebP
+- Animated AVIF
+- Multi-page TIFF
+
+The compression process detects these formats automatically:
+
+```typescript
+const animated = ['.gif', '.webp', '.avif', '.tiff']
+  .includes(extname(filePath).toLowerCase());
+
+const image = sharp(filePath, { animated }).withMetadata();
+```
+
+## Metadata Preservation
+
+By default, Zipline preserves image metadata (EXIF, IPTC, XMP) during compression:
+
+```typescript
+const image = sharp(filePath, { animated }).withMetadata();
+```
+
+To remove GPS metadata for privacy, enable the setting:
+
+```prisma
+model Zipline {
+  filesRemoveGpsMetadata Boolean @default(false)
+}
+```
+
+## Format Validation
+
+Before compressing, Zipline validates that the target format is supported:
+
+```typescript
+export function checkOutput(type: CompressType): boolean {
+  if (type === 'jpg') type = 'jpeg';
+  
+  return !!(sharp.format as any)[type]?.output?.file && 
+         !!(sharp.format as any)[type]?.output?.buffer;
+}
+```
+
+## Upload API Integration
+
+When uploading files, you can specify compression options:
+
+```bash
+POST /api/upload
+Content-Type: multipart/form-data
+
+{
+  "file": <binary>,
+  "format": "webp",
+  "quality": 80
+}
+```
+
+## Performance Considerations
+
+### Processing Time
+
+Compression adds processing time during upload:
+
+- **Small images (under 1MB)**: ~100-200ms
+- **Medium images (1-5MB)**: ~500ms-1s
+- **Large images (5-20MB)**: ~1-3s
+- **Very large images (over 20MB)**: ~3-10s
+
+### Storage Savings
+
+Typical compression ratios:
+
+- **JPEG → JPEG (quality 80)**: 30-50% reduction
+- **PNG → JPEG (quality 80)**: 60-80% reduction
+- **PNG → WebP (quality 80)**: 70-85% reduction
+- **JPEG → WebP (quality 80)**: 40-60% reduction
+- **Any → JXL (quality 85)**: 50-70% reduction
+
+### Memory Usage
+
+Sharp is memory-efficient, but processing large images requires RAM:
+
+- **4000x3000 image**: ~50-100MB RAM
+- **8000x6000 image**: ~200-300MB RAM
+- **12000x9000 image**: ~400-600MB RAM
+
+<Warning>
+Ensure your server has sufficient memory when enabling compression for high-resolution images.
+</Warning>
+
+## Error Handling
+
+If compression fails, Zipline returns an error:
+
+```typescript
+catch (error) {
+  logger.error(`failed to compress file: ${error}`);
+  
+  return {
+    mimetype: '',
+    ext: 'jpg',
+    buffer: Buffer.alloc(0),
+    failed: true,
+  };
+}
+```
+
+You can configure fallback behavior:
+
+- **Keep original**: Don't compress if processing fails
+- **Reject upload**: Return error to user
+- **Use lower quality**: Retry with reduced quality
+
+## Best Practices
+
+<Note>
+- **Choose the right format**: Use JPEG for photos, PNG for graphics with transparency
+- **WebP for modern browsers**: Best compression with good browser support
+- **Preserve originals**: Keep original files for archival if storage allows
+- **Test quality settings**: Find the balance between size and quality for your use case
+- **Monitor performance**: Watch CPU and memory usage when processing large images
+</Note>
+
+## Troubleshooting
+
+### Compression Failing
+
+- Check that Sharp is properly installed (`npm install sharp`)
+- Verify the input image is not corrupted
+- Ensure the server has enough memory
+- Check file permissions on temporary directories
+
+### Poor Quality Output
+
+- Increase the quality parameter
+- Try a different output format (WebP or JXL)
+- Check if the original image is already heavily compressed
+- Verify metadata is being preserved correctly
+
+### Slow Processing
+
+- Reduce the maximum file size limit
+- Use faster compression settings
+- Add more CPU/memory to your server
+- Consider offloading compression to a worker service

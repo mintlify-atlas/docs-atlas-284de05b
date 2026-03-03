@@ -1,0 +1,277 @@
+---
+title: 'Flameshot Integration'
+description: 'Configure Flameshot to upload screenshots to your Zipline server'
+icon: 'fire'
+---
+
+Flameshot is a powerful screenshot tool for Linux. This guide shows you how to integrate Flameshot with Zipline to automatically upload screenshots to your server.
+
+## Prerequisites
+
+- A running Zipline instance
+- Flameshot installed on your Linux machine
+- `curl` and `jq` installed (for processing uploads)
+- A Zipline user account with an API token
+
+## Quick Setup
+
+Zipline can generate a ready-to-use upload script for Flameshot:
+
+<Steps>
+  <Step title="Log in to Zipline">
+    Navigate to your Zipline instance and log in to your account.
+  </Step>
+  
+  <Step title="Generate Upload Script">
+    Go to **Settings** → **Generators** → **Flameshot**.
+    
+    Download the generated shell script (`zipline-flameshot-file.sh`).
+  </Step>
+  
+  <Step title="Make Script Executable">
+    ```bash
+    chmod +x zipline-flameshot-file.sh
+    ```
+  </Step>
+  
+  <Step title="Run the Script">
+    ```bash
+    ./zipline-flameshot-file.sh
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  The script automatically captures a screenshot with Flameshot, uploads it to Zipline, and copies the URL to your clipboard.
+</Tip>
+
+## Manual Configuration
+
+If you prefer to create the upload script manually:
+
+### Basic Upload Script
+
+```bash zipline-upload.sh
+#!/bin/bash
+
+# Take screenshot and save to temporary file
+flameshot gui -r > /tmp/screenshot.png
+
+# Upload to Zipline and copy URL to clipboard
+curl -H "authorization: YOUR_API_TOKEN" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png \
+  -H 'content-type: multipart/form-data' \
+  | jq -r .files[0].url | tr -d '\n' | xclip -selection clipboard
+```
+
+<Warning>
+  Replace `YOUR_API_TOKEN` with your actual API token and `https://your-zipline-instance.com` with your Zipline server URL.
+</Warning>
+
+### Getting Your API Token
+
+To get your API token:
+
+1. Log in to your Zipline dashboard
+2. Navigate to **Settings** → **User** → **API Token**
+3. Click **Show Token** or **Regenerate Token**
+
+## Platform-Specific Configurations
+
+### macOS
+
+For macOS users running Flameshot:
+
+```bash
+#!/bin/bash
+/Applications/flameshot.app/Contents/MacOS/flameshot gui -r > /tmp/screenshot.png
+curl -H "authorization: YOUR_API_TOKEN" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png \
+  -H 'content-type: multipart/form-data' \
+  | jq -r .files[0].url | tr -d '\n' | pbcopy
+```
+
+### Wayland Compositors
+
+For Wayland users experiencing compatibility issues:
+
+```bash
+#!/bin/bash
+export XDG_CURRENT_DESKTOP=sway
+flameshot gui -r > /tmp/screenshot.png
+curl -H "authorization: YOUR_API_TOKEN" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png \
+  -H 'content-type: multipart/form-data' \
+  | jq -r .files[0].url | tr -d '\n' | wl-copy
+```
+
+<Note>
+  For Wayland, use `wl-copy` instead of `xclip` for clipboard functionality.
+</Note>
+
+## Advanced Upload Options
+
+You can customize uploads using additional headers:
+
+<CodeGroup>
+```bash With Expiration
+curl -H "authorization: YOUR_API_TOKEN" \
+  -H "x-zipline-deletes-at: 24h" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png \
+  | jq -r .files[0].url | tr -d '\n' | xclip -selection clipboard
+```
+
+```bash With Compression
+curl -H "authorization: YOUR_API_TOKEN" \
+  -H "x-zipline-image-compression-percent: 80" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png \
+  | jq -r .files[0].url | tr -d '\n' | xclip -selection clipboard
+```
+
+```bash With Custom Format
+curl -H "authorization: YOUR_API_TOKEN" \
+  -H "x-zipline-format: date" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png \
+  | jq -r .files[0].url | tr -d '\n' | xclip -selection clipboard
+```
+
+```bash Plain Text Response
+curl -H "authorization: YOUR_API_TOKEN" \
+  -H "x-zipline-no-json: true" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png \
+  | tr -d '\n' | xclip -selection clipboard
+```
+</CodeGroup>
+
+### Available Options
+
+| Header | Description | Example |
+|--------|-------------|----------|
+| `x-zipline-deletes-at` | Set expiration time | `24h`, `7d`, `never` |
+| `x-zipline-format` | Filename format | `random`, `uuid`, `date` |
+| `x-zipline-image-compression-percent` | Compression quality (0-100) | `80` |
+| `x-zipline-max-views` | Max views before deletion | `10` |
+| `x-zipline-original-name` | Preserve original filename | `true` |
+| `x-zipline-no-json` | Return plain text URL | `true` |
+
+## Setting Up Keyboard Shortcuts
+
+### GNOME/KDE
+
+<Steps>
+  <Step title="Open Keyboard Settings">
+    Navigate to **Settings** → **Keyboard** → **Custom Shortcuts**.
+  </Step>
+  
+  <Step title="Create New Shortcut">
+    - **Name**: Zipline Screenshot Upload
+    - **Command**: `/path/to/zipline-upload.sh`
+    - **Shortcut**: Choose your preferred key combination (e.g., `Ctrl+Shift+U`)
+  </Step>
+</Steps>
+
+### i3/Sway
+
+Add to your config file:
+
+```bash ~/.config/i3/config
+bindsym $mod+Shift+u exec /path/to/zipline-upload.sh
+```
+
+For Sway:
+
+```bash ~/.config/sway/config
+bindsym $mod+Shift+u exec /path/to/zipline-upload.sh
+```
+
+## URL Shortening Script
+
+You can also create a script for URL shortening:
+
+```bash zipline-shorten.sh
+#!/bin/bash
+
+if [ -z "$1" ]; then
+  echo "Usage: $0 <url>"
+  exit 1
+fi
+
+curl -H "authorization: YOUR_API_TOKEN" \
+  -H "content-type: application/json" \
+  https://your-zipline-instance.com/api/user/urls \
+  -d "{\"destination\": \"$1\"}" \
+  | jq -r .url | tr -d '\n' | xclip -selection clipboard
+
+echo "Shortened URL copied to clipboard!"
+```
+
+Usage:
+```bash
+chmod +x zipline-shorten.sh
+./zipline-shorten.sh https://example.com/very/long/url
+```
+
+## Troubleshooting
+
+### Screenshot not uploading
+
+**Check dependencies:**
+```bash
+which flameshot curl jq xclip
+```
+
+Install missing dependencies:
+```bash
+# Debian/Ubuntu
+sudo apt install flameshot curl jq xclip
+
+# Fedora
+sudo dnf install flameshot curl jq xclip
+
+# Arch
+sudo pacman -S flameshot curl jq xclip
+```
+
+### Clipboard not working on Wayland
+
+Replace `xclip -selection clipboard` with `wl-copy`:
+
+```bash
+sudo apt install wl-clipboard  # Debian/Ubuntu
+```
+
+### Permission denied errors
+
+Ensure the script is executable:
+```bash
+chmod +x /path/to/zipline-upload.sh
+```
+
+### jq: command not found
+
+If you prefer not to install `jq`, use the plain text response option:
+
+```bash
+curl -H "authorization: YOUR_API_TOKEN" \
+  -H "x-zipline-no-json: true" \
+  https://your-zipline-instance.com/api/upload \
+  -F file=@/tmp/screenshot.png
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Upload API" icon="cloud-arrow-up" href="/api/upload/file">
+    Learn about the upload API endpoint
+  </Card>
+  <Card title="ShareX Integration" icon="windows" href="/integrations/sharex">
+    Set up ShareX on Windows
+  </Card>
+</CardGroup>

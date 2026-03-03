@@ -1,0 +1,319 @@
+---
+title: Two-Factor Authentication & Passkeys
+description: Secure your account with TOTP-based 2FA and WebAuthn passkeys
+---
+
+Zipline supports two methods of multi-factor authentication (MFA) to enhance account security: TOTP (Time-based One-Time Password) and WebAuthn Passkeys.
+
+## Authentication Methods
+
+<CardGroup cols={2}>
+  <Card title="TOTP (2FA)" icon="mobile">
+    Use authenticator apps like Google Authenticator, Authy, or 1Password
+  </Card>
+  <Card title="Passkeys" icon="key">
+    Use biometric authentication or hardware security keys via WebAuthn
+  </Card>
+</CardGroup>
+
+## TOTP (Time-Based One-Time Password)
+
+### Configuration
+
+Enable TOTP authentication in your database configuration:
+
+```prisma
+model Zipline {
+  mfaTotpEnabled Boolean @default(false)
+  mfaTotpIssuer  String  @default("Zipline")
+}
+```
+
+- **mfaTotpEnabled**: Enable TOTP 2FA functionality
+- **mfaTotpIssuer**: The issuer name shown in authenticator apps (e.g., "Zipline")
+
+### Setting Up TOTP
+
+<Steps>
+  <Step title="Navigate to Security Settings">
+    Go to your user settings and find the Two-Factor Authentication section.
+  </Step>
+  
+  <Step title="Generate Secret">
+    Click to enable TOTP. The system will generate a secret key and QR code.
+  </Step>
+  
+  <Step title="Scan QR Code">
+    Open your authenticator app and scan the QR code, or manually enter the secret key.
+  </Step>
+  
+  <Step title="Verify Code">
+    Enter the 6-digit code from your authenticator app to confirm setup.
+  </Step>
+</Steps>
+
+### API Endpoints
+
+#### Get TOTP Secret
+
+```bash
+GET /api/user/mfa/totp
+```
+
+Returns a new TOTP secret and QR code if not already configured, or returns the existing secret.
+
+**Response:**
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "qrcode": "data:image/png;base64,..."
+}
+```
+
+#### Enable TOTP
+
+```bash
+POST /api/user/mfa/totp
+Content-Type: application/json
+
+{
+  "code": "123456",
+  "secret": "JBSWY3DPEHPK3PXP"
+}
+```
+
+#### Disable TOTP
+
+```bash
+DELETE /api/user/mfa/totp
+Content-Type: application/json
+
+{
+  "code": "123456"
+}
+```
+
+### Implementation Reference
+
+The TOTP implementation uses the `totp` library and can be found at `src/server/routes/api/user/mfa/totp.ts:24`:
+
+```typescript
+// Generate TOTP secret
+const secret = generateKey();
+const qrcode = await totpQrcode({
+  issuer: config.mfa.totp.issuer,
+  username: req.user.username,
+  secret,
+});
+
+// Verify TOTP code
+const valid = verifyTotpCode(code, secret);
+if (!valid) return res.badRequest('Invalid code');
+```
+
+## WebAuthn Passkeys
+
+Passkeys provide passwordless authentication using biometrics (Face ID, Touch ID, Windows Hello) or hardware security keys (YubiKey, etc.).
+
+### Configuration
+
+Enable passkeys in your database configuration:
+
+```prisma
+model Zipline {
+  mfaPasskeysEnabled Boolean @default(false)
+  mfaPasskeysRpID    String?
+  mfaPasskeysOrigin  String?
+}
+```
+
+- **mfaPasskeysEnabled**: Enable passkey functionality
+- **mfaPasskeysRpID**: Relying Party ID (your domain, e.g., "example.com")
+- **mfaPasskeysOrigin**: Full origin URL (e.g., "https://example.com")
+
+<Warning>
+The RP ID must match your domain. For `https://zipline.example.com`, use `example.com` or `zipline.example.com`.
+</Warning>
+
+### Registering a Passkey
+
+<Steps>
+  <Step title="Navigate to Security Settings">
+    Go to your user settings and find the Passkeys section.
+  </Step>
+  
+  <Step title="Create Passkey">
+    Click "Add Passkey" and give it a name (e.g., "iPhone", "YubiKey").
+  </Step>
+  
+  <Step title="Complete Registration">
+    Follow your browser's prompts to register the passkey using your device's biometric sensor or security key.
+  </Step>
+  
+  <Step title="Verify">
+    The passkey is now registered and can be used for authentication.
+  </Step>
+</Steps>
+
+### API Endpoints
+
+#### List Passkeys
+
+```bash
+GET /api/user/mfa/passkey
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "clx1234567890",
+    "name": "iPhone",
+    "createdAt": "2024-01-15T10:30:00Z",
+    "lastUsed": "2024-01-20T14:22:00Z"
+  }
+]
+```
+
+#### Get Registration Options
+
+```bash
+GET /api/user/mfa/passkey/options
+```
+
+Returns WebAuthn registration options for creating a new passkey.
+
+#### Register Passkey
+
+```bash
+POST /api/user/mfa/passkey
+Content-Type: application/json
+
+{
+  "response": { /* WebAuthn credential response */ },
+  "name": "My YubiKey"
+}
+```
+
+#### Delete Passkey
+
+```bash
+DELETE /api/user/mfa/passkey
+Content-Type: application/json
+
+{
+  "id": "clx1234567890"
+}
+```
+
+### Authentication with Passkeys
+
+Passkeys can be used for passwordless login:
+
+```bash
+# Get authentication options
+GET /api/auth/webauthn/options
+
+# Authenticate
+POST /api/auth/webauthn
+Content-Type: application/json
+
+{
+  "response": { /* WebAuthn authentication response */ }
+}
+```
+
+### Database Schema
+
+Passkey data is stored in the `UserPasskey` model:
+
+```prisma
+model UserPasskey {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastUsed  DateTime?
+  
+  name String
+  reg  Json  // WebAuthn credential data
+  
+  User   User   @relation(fields: [userId], references: [id])
+  userId String
+}
+```
+
+The `reg` field contains WebAuthn credential information:
+
+```typescript
+type PasskeyReg = {
+  webauthn: {
+    webAuthnUserID: string;
+    id: string;
+    publicKey: string;
+    counter: number;
+    transports?: string[];
+    deviceType?: string;
+    backedUp?: boolean;
+  };
+};
+```
+
+### Implementation Reference
+
+The passkey implementation uses `@simplewebauthn/server` and can be found at:
+
+- **Registration**: `src/server/routes/api/user/mfa/passkey.ts:107`
+- **Authentication**: `src/server/routes/api/auth/webauthn.ts:71`
+
+```typescript
+// Generate registration options
+const options = await generateRegistrationOptions({
+  rpName: 'Zipline',
+  rpID: config.mfa.passkeys.rpID!,
+  userName: req.user.username,
+  userID: new TextEncoder().encode(req.user.id),
+  authenticatorSelection: {
+    userVerification: 'preferred',
+    residentKey: 'preferred',
+  },
+});
+
+// Verify registration
+const verification = await verifyRegistrationResponse({
+  response: response,
+  expectedChallenge: optionsCached.challenge,
+  expectedRPID: optionsCached.rp.id!,
+  expectedOrigin: config.mfa.passkeys.origin!,
+});
+```
+
+## Security Best Practices
+
+<Note>
+- **Use both methods**: Enable both TOTP and passkeys for maximum security
+- **Multiple passkeys**: Register backup passkeys in case one is lost
+- **Secure recovery**: Keep backup codes in a safe place
+- **Regular audits**: Review your active MFA methods periodically
+</Note>
+
+## Troubleshooting
+
+### Passkey Registration Fails
+
+- Verify `mfaPasskeysRpID` matches your domain
+- Ensure `mfaPasskeysOrigin` includes the protocol (https://)
+- Check that your browser supports WebAuthn
+- Try using a different authenticator
+
+### TOTP Code Invalid
+
+- Ensure your device's time is synchronized
+- Double-check the 6-digit code
+- Wait for the next code if the current one is about to expire
+- Verify the secret was correctly entered in your authenticator app
+
+### Cannot Disable MFA
+
+- You must provide a valid TOTP code to disable TOTP
+- Ensure you're using the correct passkey ID when deleting
+- Check that MFA is actually enabled for your account

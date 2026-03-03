@@ -1,0 +1,239 @@
+---
+title: Invite Management
+description: Create and manage user invites for your Zipline instance
+---
+
+Invites allow you to control user registration by requiring invite codes. This is useful for private instances or controlled access environments.
+
+## Enabling Invites
+
+Invites must be enabled in your Zipline configuration:
+
+```bash
+INVITES_ENABLED=true
+INVITES_LENGTH=12  # Length of generated invite codes
+```
+
+<Note>
+If invites are enabled, users must provide a valid invite code during registration. Without invites enabled, registration may be open to anyone depending on your configuration.
+</Note>
+
+## Creating Invites
+
+Administrators can create invite codes through the API:
+
+```bash
+curl -X POST https://your-zipline.com/api/auth/invites \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expiresAt": "2024-12-31T23:59:59Z",
+    "maxUses": 5
+  }'
+```
+
+### Invite Parameters
+
+- `expiresAt` - When the invite expires (ISO 8601 date string or "never")
+- `maxUses` - Maximum number of times the invite can be used (optional)
+
+### Expiration Options
+
+Set a specific expiration date:
+```json
+{
+  "expiresAt": "2024-06-01T00:00:00Z"
+}
+```
+
+Create an invite that never expires:
+```json
+{
+  "expiresAt": "never"
+}
+```
+
+### Usage Limits
+
+Limit invite to a specific number of uses:
+```json
+{
+  "expiresAt": "never",
+  "maxUses": 10
+}
+```
+
+Create a single-use invite:
+```json
+{
+  "expiresAt": "2024-12-31",
+  "maxUses": 1
+}
+```
+
+## Managing Invites
+
+### List All Invites
+
+Retrieve all invite codes:
+
+```bash
+curl https://your-zipline.com/api/auth/invites \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Response includes:
+- Invite code
+- Current usage count
+- Maximum uses
+- Expiration date
+- Creator information
+
+### Get Invite Details
+
+Retrieve information about a specific invite by ID or code:
+
+```bash
+curl https://your-zipline.com/api/auth/invites/{id_or_code} \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Delete Invite
+
+Revoke an invite code:
+
+```bash
+curl -X DELETE https://your-zipline.com/api/auth/invites/{id} \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+<Warning>
+Deleting an invite immediately invalidates the code. Users with this code will no longer be able to register.
+</Warning>
+
+## Invite Validation
+
+When a user registers with an invite code, Zipline automatically validates:
+
+<Steps>
+  <Step title="Code Existence">
+    The invite code must exist in the database
+  </Step>
+  
+  <Step title="Expiration Check">
+    The current date must be before the expiration date (if set)
+  </Step>
+  
+  <Step title="Usage Limit">
+    The number of uses must be less than maxUses (if set)
+  </Step>
+  
+  <Step title="Increment Counter">
+    Upon successful registration, the usage counter is incremented
+  </Step>
+</Steps>
+
+## Web Invite Validation
+
+You can validate an invite code without registering:
+
+```bash
+curl https://your-zipline.com/api/auth/invites/web?code=INVITE_CODE
+```
+
+This endpoint returns invite information if valid, or indicates if the invite is:
+- Expired
+- Fully used
+- Non-existent
+
+## Registration with Invites
+
+When registering with an invite code:
+
+```bash
+curl -X POST https://your-zipline.com/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "secure_password",
+    "code": "INVITE_CODE_HERE"
+  }'
+```
+
+### Invite Validation Errors
+
+Common error responses:
+
+- `"Invites aren't enabled"` - Invites are disabled in configuration
+- `"Invalid invite code"` - Code doesn't exist, is expired, or is fully used
+
+## Invite Data Model
+
+Each invite contains:
+
+```typescript
+{
+  id: string,              // Unique identifier
+  code: string,            // The invite code
+  uses: number,            // Current number of uses
+  maxUses: number | null,  // Maximum uses allowed
+  expiresAt: Date | null,  // Expiration date
+  inviterId: string,       // ID of admin who created it
+  createdAt: Date,         // Creation timestamp
+  inviter: {               // Creator information
+    username: string,
+    id: string,
+    role: string
+  }
+}
+```
+
+## Invite Code Generation
+
+Invite codes are automatically generated using cryptographically secure random characters. The length is controlled by the `INVITES_LENGTH` configuration option.
+
+Default length: 12 characters
+```bash
+INVITES_LENGTH=12
+```
+
+For higher security, increase the length:
+```bash
+INVITES_LENGTH=24
+```
+
+## Tracking Invite Usage
+
+Monitor which invites are being used:
+
+<Steps>
+  <Step title="List Invites">
+    Retrieve all invites to see usage counts
+  </Step>
+  
+  <Step title="Check Logs">
+    Server logs record when invites are used, including the new user's username
+  </Step>
+  
+  <Step title="Review Analytics">
+    Cross-reference invite usage with user creation timestamps
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Note>
+**Security Recommendations:**
+
+- Set expiration dates on invites to limit their validity window
+- Use `maxUses: 1` for invites sent to specific individuals
+- Regularly audit active invites and delete unused ones
+- Monitor invite usage in server logs
+- Rotate invite codes periodically for shared invites
+</Note>
+
+## Backup and Export
+
+Invites are included in server exports and backups. When restoring from a backup, all invite codes and their usage statistics are preserved.
+
+See the [Backups documentation](/admin/backups) for more information on including invites in your backup strategy.

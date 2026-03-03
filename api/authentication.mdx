@@ -1,0 +1,275 @@
+---
+title: Authentication
+description: Learn how to authenticate with the Zipline API using tokens and sessions
+---
+
+Zipline supports two primary authentication methods: API tokens for programmatic access and session-based authentication for web applications.
+
+## API Token Authentication
+
+API tokens are the recommended method for programmatic access to the Zipline API. Tokens are user-specific and can be found in your user dashboard.
+
+### Getting Your Token
+
+1. Log in to your Zipline instance
+2. Navigate to your user settings or dashboard
+3. Copy your API token
+
+<Warning>
+  Never share your API token or commit it to version control. Treat it like a password.
+</Warning>
+
+### Using Your Token
+
+Include your token in the `Authorization` header of every API request:
+
+```bash
+curl -X GET https://your-zipline-instance.com/api/user \
+  -H "Authorization: YOUR_API_TOKEN"
+```
+
+### Token Format
+
+Tokens are encrypted using the server's secret key. The token structure is:
+
+- Encrypted with AES-256-GCM
+- Contains a timestamp and the actual token
+- Validated on each request
+
+From the source code (src/server/middleware/user.ts:17-40):
+
+```typescript
+export function parseUserToken(encryptedToken: string | undefined | null): string {
+  if (!encryptedToken) {
+    throw { error: 'no token' };
+  }
+
+  const decryptedToken = decryptToken(encryptedToken, config.core.secret);
+  if (!decryptedToken) {
+    throw { error: 'could not decrypt token' };
+  }
+
+  const [date, token] = decryptedToken;
+  if (isNaN(new Date(date).getTime())) {
+    throw { error: 'invalid token' };
+  }
+
+  return token;
+}
+```
+
+## Session-Based Authentication
+
+Session authentication is used for web browser access and is managed automatically by the Zipline web interface.
+
+### How Sessions Work
+
+1. User logs in via `/api/auth/login`
+2. Server creates an encrypted session cookie
+3. Session is stored in the database
+4. Cookie is sent with each subsequent request
+
+### Session Configuration
+
+From the source code (src/server/session.ts:9-17):
+
+```typescript
+const cookieOptions = {
+  // 2 weeks
+  maxAge: 60 * 60 * 24 * 14,
+  expires: new Date(Date.now() + 60 * 60 * 24 * 14 * 1000),
+  path: '/',
+  sameSite: 'lax',
+  httpOnly: true,
+  secure: config.core.returnHttpsUrls
+};
+```
+
+**Session Details:**
+- **Cookie Name**: `zipline_session`
+- **Duration**: 14 days
+- **Storage**: Encrypted using iron-session
+- **Security**: httpOnly, sameSite protection
+
+### Session Data Structure
+
+```typescript
+type ZiplineSession = {
+  id: string | null;           // User ID
+  sessionId: string | null;    // Session identifier
+  client: ZiplineClient;       // Client information (UA, device)
+};
+```
+
+## Login Flow
+
+### Standard Login
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "your-username",
+    "password": "your-password"
+  }'
+```
+
+**Response:**
+```json
+{
+  "user": {
+    "id": "clx1y2z3a0000...",
+    "username": "your-username",
+    "role": "USER",
+    "token": "encrypted_token_here",
+    "createdAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### Two-Factor Authentication (TOTP)
+
+If TOTP is enabled for the user, the initial login returns:
+
+```json
+{
+  "totp": true
+}
+```
+
+Then submit the TOTP code:
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "your-username",
+    "password": "your-password",
+    "code": "123456"
+  }'
+```
+
+## OAuth Authentication
+
+Zipline supports OAuth authentication with multiple providers:
+
+- **Discord**: `/api/auth/oauth/discord`
+- **GitHub**: `/api/auth/oauth/github`
+- **Google**: `/api/auth/oauth/google`
+- **OpenID Connect**: `/api/auth/oauth/oidc`
+
+### OAuth Flow
+
+1. Redirect user to OAuth provider's authorization URL
+2. User authorizes the application
+3. Provider redirects back to Zipline with authorization code
+4. Zipline exchanges code for access token
+5. Session is created for the user
+
+## Anonymous Uploads
+
+Zipline supports anonymous uploads to public folders when configured:
+
+```bash
+curl -X POST https://your-zipline-instance.com/api/upload \
+  -H "X-Zipline-Folder: folder_id_here" \
+  -F "file=@/path/to/file.png"
+```
+
+From the source code (src/server/middleware/user.ts:47-52), anonymous folder uploads are allowed when:
+- `X-Zipline-Folder` header is present
+- Uploading to `/api/upload` or `/api/upload/partial`
+- No authorization header or session cookie is provided
+- The folder allows uploads from anonymous users
+
+## Authentication Middleware
+
+The authentication middleware checks for credentials in this order:
+
+1. **Authorization header** - API token
+2. **Session cookie** - Existing session
+3. **Anonymous upload** - If folder-based upload
+
+From src/server/middleware/user.ts:43-94:
+
+```typescript
+export async function userMiddleware(req: FastifyRequest, res: FastifyReply) {
+  const authorization = req.headers.authorization;
+
+  if (authorization) {
+    const token = parseUserToken(authorization);
+    const user = await prisma.user.findFirst({
+      where: { token },
+      select: userSelect,
+    });
+    if (!user) return res.unauthorized('invalid authorization token');
+    req.user = user;
+    return;
+  }
+
+  const session = await getSession(req, res);
+  if (!session.id || !session.sessionId) {
+    return res.unauthorized('not logged in');
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      sessions: {
+        some: { id: session.sessionId }
+      }
+    },
+    select: userSelect,
+  });
+  if (!user) return res.unauthorized('invalid login session');
+  req.user = user;
+}
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use HTTPS in production">
+    Always use HTTPS for your Zipline instance to prevent token interception. Configure `ZIPLINE_CORE_RETURN_HTTPS_URLS=true` in your environment.
+  </Accordion>
+
+  <Accordion title="Rotate tokens periodically">
+    Regenerate your API token if you suspect it has been compromised. Update all applications using the old token.
+  </Accordion>
+
+  <Accordion title="Store tokens securely">
+    Use environment variables or secure secret management systems to store tokens. Never hardcode them in your source code.
+  </Accordion>
+
+  <Accordion title="Use token-based auth for automation">
+    For scripts, CI/CD, and automation, always use API tokens instead of sessions. Sessions are designed for browser-based access.
+  </Accordion>
+
+  <Accordion title="Enable rate limiting">
+    Configure rate limiting in your Zipline instance to protect against brute force attacks and abuse.
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+Authentication failures return specific error codes:
+
+| Status Code | Error | Description |
+|-------------|-------|-------------|
+| 401 | `no token` | No Authorization header provided |
+| 401 | `could not decrypt token` | Invalid or corrupted token |
+| 401 | `invalid token` | Token format is invalid |
+| 401 | `invalid authorization token` | Token does not match any user |
+| 401 | `not logged in` | No valid session found |
+| 401 | `invalid login session` | Session is invalid or expired |
+| 403 | `forbidden` | Access denied (insufficient permissions) |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Upload Files" icon="cloud-arrow-up" href="/api/endpoints/upload">
+    Learn how to upload files with your token
+  </Card>
+  <Card title="Rate Limits" icon="gauge-high" href="/api/rate-limits">
+    Understand API rate limiting
+  </Card>
+</CardGroup>

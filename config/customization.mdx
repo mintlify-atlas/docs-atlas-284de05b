@@ -1,0 +1,423 @@
+---
+title: Customization
+description: Customize your Zipline instance with branding, themes, and user-facing options
+---
+
+Zipline provides extensive customization options to brand your instance and tailor the user experience.
+
+## Website Settings
+
+### Basic Branding
+
+<ParamField path="WEBSITE_TITLE" type="string" default="Zipline">
+  Website title displayed in browser tabs and page headers.
+  
+  ```bash
+  WEBSITE_TITLE=My File Server
+  ```
+</ParamField>
+
+<ParamField path="WEBSITE_TITLE_LOGO" type="string" default="null">
+  URL to a logo image displayed next to the title.
+  
+  ```bash
+  WEBSITE_TITLE_LOGO=https://example.com/logo.png
+  ```
+</ParamField>
+
+<ParamField path="WEBSITE_DEFAULT_AVATAR" type="string" default="null">
+  Path to default avatar image for users without custom avatars.
+  
+  ```bash
+  WEBSITE_DEFAULT_AVATAR=/zipline/public/default-avatar.png
+  ```
+</ParamField>
+
+### Login Page Customization
+
+<ParamField path="WEBSITE_LOGIN_BACKGROUND" type="string" default="null">
+  URL to background image for the login page.
+  
+  ```bash
+  WEBSITE_LOGIN_BACKGROUND=https://example.com/background.jpg
+  ```
+</ParamField>
+
+<ParamField path="WEBSITE_LOGIN_BACKGROUND_BLUR" type="boolean" default="true">
+  Apply blur effect to login background image.
+  
+  ```bash
+  WEBSITE_LOGIN_BACKGROUND_BLUR=false
+  ```
+</ParamField>
+
+### External Links
+
+<ParamField path="WEBSITE_EXTERNAL_LINKS" type="json" default='[{"name":"GitHub","url":"https://github.com/diced/zipline"},{"name":"Documentation","url":"https://zipline.diced.sh/"}]'>
+  JSON array of external links displayed in the interface.
+  
+  ```bash
+  WEBSITE_EXTERNAL_LINKS='[{"name":"Support","url":"https://example.com/support"},{"name":"Status","url":"https://status.example.com"}]'
+  ```
+</ParamField>
+
+Each link object should have:
+- `name` (string): Display text for the link
+- `url` (string): Valid URL
+
+Example:
+```json
+[
+  {"name": "GitHub", "url": "https://github.com/yourorg/zipline"},
+  {"name": "Documentation", "url": "https://docs.example.com"},
+  {"name": "Support", "url": "https://support.example.com"}
+]
+```
+
+### Terms of Service
+
+<ParamField path="WEBSITE_TOS" type="string" default="null">
+  Path to a Markdown file containing terms of service.
+  
+  ```bash
+  WEBSITE_TOS=/zipline/tos.md
+  ```
+</ParamField>
+
+<Note>
+  The ToS file must be a `.md` (Markdown) file. Users will be required to accept the terms during registration.
+</Note>
+
+## Theme Configuration
+
+Zipline supports custom themes with separate configurations for light and dark modes.
+
+<ParamField path="WEBSITE_THEME_DEFAULT" type="string" default="system">
+  Default theme selection. Options: `system`, `dark`, `light`.
+  
+  ```bash
+  WEBSITE_THEME_DEFAULT=dark
+  ```
+</ParamField>
+
+<ParamField path="WEBSITE_THEME_DARK" type="string" default="builtin:dark_gray">
+  Theme to use in dark mode.
+  
+  ```bash
+  WEBSITE_THEME_DARK=builtin:dark_gray
+  # or custom theme
+  WEBSITE_THEME_DARK=custom:mytheme
+  ```
+</ParamField>
+
+<ParamField path="WEBSITE_THEME_LIGHT" type="string" default="builtin:light_gray">
+  Theme to use in light mode.
+  
+  ```bash
+  WEBSITE_THEME_LIGHT=builtin:light_gray
+  # or custom theme
+  WEBSITE_THEME_LIGHT=custom:mylighttheme
+  ```
+</ParamField>
+
+### Built-in Themes
+
+Zipline includes several built-in themes:
+
+**Dark Themes:**
+- `builtin:dark_gray` (default)
+- `builtin:dark_blue`
+
+**Light Themes:**
+- `builtin:light_gray` (default)
+- `builtin:light_blue`
+
+### Custom Themes
+
+Create custom themes by placing theme files in the `/zipline/themes` directory.
+
+1. Create a JSON theme file:
+
+```json themes/mytheme.json
+{
+  "name": "My Custom Theme",
+  "dark": true,
+  "colors": {
+    "primary": "#3b82f6",
+    "background": "#1a1a1a",
+    "foreground": "#ffffff",
+    "card": "#262626",
+    "border": "#404040"
+  }
+}
+```
+
+2. Mount the themes directory in Docker:
+
+```yaml docker-compose.yml
+volumes:
+  - './themes:/zipline/themes'
+```
+
+3. Reference in environment variable:
+
+```bash
+WEBSITE_THEME_DARK=custom:mytheme
+```
+
+## Progressive Web App (PWA)
+
+Configure Zipline as a Progressive Web App for mobile-friendly installation.
+
+<ParamField path="PWA_ENABLED" type="boolean" default="false">
+  Enable PWA manifest and service worker.
+  
+  ```bash
+  PWA_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="PWA_TITLE" type="string" default="Zipline">
+  Application name displayed when installed as PWA.
+  
+  ```bash
+  PWA_TITLE=MyFiles
+  ```
+</ParamField>
+
+<ParamField path="PWA_SHORT_NAME" type="string" default="Zipline">
+  Short name for PWA (used on home screen).
+  
+  ```bash
+  PWA_SHORT_NAME=Files
+  ```
+</ParamField>
+
+<ParamField path="PWA_DESCRIPTION" type="string" default="Zipline">
+  Description of the PWA.
+  
+  ```bash
+  PWA_DESCRIPTION=My personal file sharing platform
+  ```
+</ParamField>
+
+<ParamField path="PWA_THEME_COLOR" type="string" default="#000000">
+  Theme color for PWA (affects browser UI).
+  
+  ```bash
+  PWA_THEME_COLOR=#3b82f6
+  ```
+</ParamField>
+
+<ParamField path="PWA_BACKGROUND_COLOR" type="string" default="#000000">
+  Background color shown during PWA launch.
+  
+  ```bash
+  PWA_BACKGROUND_COLOR=#1a1a1a
+  ```
+</ParamField>
+
+### PWA Example
+
+```bash
+PWA_ENABLED=true
+PWA_TITLE="MyFiles"
+PWA_SHORT_NAME="Files"
+PWA_DESCRIPTION="Personal file sharing and storage"
+PWA_THEME_COLOR="#3b82f6"
+PWA_BACKGROUND_COLOR="#1a1a1a"
+```
+
+## File URL Configuration
+
+<ParamField path="FILES_ROUTE" type="string" default="/u">
+  URL route prefix for uploaded files.
+  
+  ```bash
+  FILES_ROUTE=/f
+  # Results in URLs like: https://example.com/f/abc123.png
+  ```
+</ParamField>
+
+<ParamField path="URLS_ROUTE" type="string" default="/go">
+  URL route prefix for shortened URLs.
+  
+  ```bash
+  URLS_ROUTE=/s
+  # Results in URLs like: https://example.com/s/abc123
+  ```
+</ParamField>
+
+<Note>
+  Route values must start with `/` and be lowercase. Changing routes after deployment will break existing file links.
+</Note>
+
+## Feature Visibility
+
+<ParamField path="FEATURES_ROBOTS_TXT" type="boolean" default="true">
+  Serve a robots.txt file to control search engine indexing.
+  
+  ```bash
+  FEATURES_ROBOTS_TXT=true
+  ```
+</ParamField>
+
+When enabled, Zipline serves a robots.txt that:
+- Disallows indexing of uploaded files
+- Disallows indexing of admin panels
+- Allows indexing of public pages
+
+Set to `false` for completely private instances.
+
+## Customization Examples
+
+<AccordionGroup>
+  <Accordion title="Corporate Branding" icon="building">
+    ```bash
+    # Company branding
+    WEBSITE_TITLE="Acme Corp Files"
+    WEBSITE_TITLE_LOGO="https://cdn.acme.com/logo.svg"
+    
+    # Custom colors via theme
+    WEBSITE_THEME_DARK="custom:acme_dark"
+    WEBSITE_THEME_LIGHT="custom:acme_light"
+    
+    # Corporate links
+    WEBSITE_EXTERNAL_LINKS='[{"name":"IT Support","url":"https://support.acme.com"},{"name":"Privacy Policy","url":"https://acme.com/privacy"}]'
+    
+    # Terms of service
+    WEBSITE_TOS="/zipline/corporate-tos.md"
+    
+    # Custom routes
+    FILES_ROUTE="/files"
+    URLS_ROUTE="/links"
+    ```
+  </Accordion>
+  
+  <Accordion title="Personal Instance" icon="user">
+    ```bash
+    # Personal branding
+    WEBSITE_TITLE="John's Files"
+    WEBSITE_LOGIN_BACKGROUND="https://example.com/my-photo.jpg"
+    WEBSITE_LOGIN_BACKGROUND_BLUR="true"
+    
+    # Simple theme
+    WEBSITE_THEME_DEFAULT="dark"
+    WEBSITE_THEME_DARK="builtin:dark_blue"
+    
+    # Minimal external links
+    WEBSITE_EXTERNAL_LINKS='[{"name":"Portfolio","url":"https://john.example.com"}]'
+    
+    # Clean URLs
+    FILES_ROUTE="/i"
+    URLS_ROUTE="/l"
+    
+    # No robots.txt (private)
+    FEATURES_ROBOTS_TXT="false"
+    ```
+  </Accordion>
+  
+  <Accordion title="Community Server" icon="users">
+    ```bash
+    # Community branding
+    WEBSITE_TITLE="Community Files"
+    WEBSITE_TITLE_LOGO="https://cdn.example.com/community-logo.png"
+    
+    # Friendly appearance
+    WEBSITE_THEME_DEFAULT="system"
+    WEBSITE_THEME_DARK="builtin:dark_gray"
+    WEBSITE_THEME_LIGHT="builtin:light_gray"
+    
+    # Community links
+    WEBSITE_EXTERNAL_LINKS='[{"name":"Discord","url":"https://discord.gg/example"},{"name":"Rules","url":"https://example.com/rules"},{"name":"Donate","url":"https://example.com/donate"}]'
+    
+    # Community terms
+    WEBSITE_TOS="/zipline/community-tos.md"
+    
+    # PWA for mobile users
+    PWA_ENABLED="true"
+    PWA_TITLE="Community Files"
+    PWA_SHORT_NAME="CommFiles"
+    PWA_DESCRIPTION="Community file sharing"
+    PWA_THEME_COLOR="#10b981"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Static Assets
+
+Custom images and files should be placed in the `/zipline/public` directory:
+
+```yaml docker-compose.yml
+volumes:
+  - './public:/zipline/public'
+```
+
+Then reference them:
+
+```bash
+WEBSITE_TITLE_LOGO="/zipline/public/logo.png"
+WEBSITE_DEFAULT_AVATAR="/zipline/public/default-avatar.png"
+WEBSITE_LOGIN_BACKGROUND="/zipline/public/background.jpg"
+```
+
+## Multi-Domain Configuration
+
+<ParamField path="DOMAINS" type="string[]" default="[]">
+  Additional domains for multi-domain support.
+  
+  ```bash
+  DOMAINS=files.example.com,uploads.example.com,cdn.example.com
+  ```
+</ParamField>
+
+<ParamField path="CORE_DEFAULT_DOMAIN" type="string" default="null">
+  Default domain to use when generating URLs.
+  
+  ```bash
+  CORE_DEFAULT_DOMAIN=cdn.example.com
+  ```
+</ParamField>
+
+Use cases:
+- Separate domains for different file types
+- CDN integration
+- Geographic distribution
+- Branding variations
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Image Optimization" icon="image">
+    - Use optimized images for logos and backgrounds
+    - Recommended logo size: 200x50px (or similar aspect ratio)
+    - Background images: Use compressed JPEG/WebP
+    - Limit background image size to less than 500KB
+  </Accordion>
+  
+  <Accordion title="Theme Consistency" icon="palette">
+    - Ensure light and dark themes are visually coherent
+    - Test themes on multiple devices
+    - Consider color accessibility (WCAG guidelines)
+    - Provide sufficient contrast ratios
+  </Accordion>
+  
+  <Accordion title="Mobile Experience" icon="mobile">
+    - Enable PWA for better mobile experience
+    - Test login background on mobile devices
+    - Keep external links list concise (3-5 items max)
+    - Use responsive images
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="list" href="/config/environment-variables">
+    Complete configuration reference
+  </Card>
+  
+  <Card title="Datasource Configuration" icon="database" href="/config/datasource">
+    Storage backend setup
+  </Card>
+</CardGroup>

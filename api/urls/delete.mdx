@@ -1,0 +1,149 @@
+---
+title: 'Delete Short URL'
+description: 'Delete a shortened URL'
+---
+
+Permanently delete a shortened URL. This action cannot be undone.
+
+## Endpoint
+
+```http
+DELETE /api/user/urls/:id
+```
+
+## Authentication
+
+Requires authentication via API token in the `Authorization` header.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The ID of the URL to delete
+</ParamField>
+
+## Response
+
+Returns the deleted URL object for confirmation. Passwords are excluded from the response.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the deleted URL
+</ResponseField>
+
+<ResponseField name="code" type="string" required>
+  Random code that was used for the URL
+</ResponseField>
+
+<ResponseField name="vanity" type="string | null">
+  Custom vanity string, if it was set
+</ResponseField>
+
+<ResponseField name="destination" type="string" required>
+  The destination URL that was being redirected to
+</ResponseField>
+
+<ResponseField name="views" type="number" required>
+  Total number of times the URL was accessed before deletion
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum views limit, if it was set
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean" required>
+  Whether the URL was enabled when deleted
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the URL was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp of when the URL was last updated
+</ResponseField>
+
+<ResponseField name="userId" type="string | null">
+  ID of the user who owned this URL
+</ResponseField>
+
+## Example Request
+
+```bash cURL
+curl -X DELETE "https://your-zipline-instance.com/api/user/urls/clx123" \
+  -H "Authorization: your-api-token"
+```
+
+```javascript JavaScript/TypeScript
+async function deleteUrl(urlId: string) {
+  const response = await fetch(
+    `https://your-zipline-instance.com/api/user/urls/${urlId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'your-api-token',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to delete URL');
+  }
+
+  const deletedUrl = await response.json();
+  console.log('Deleted URL:', deletedUrl.destination);
+  return deletedUrl;
+}
+```
+
+```python Python
+import requests
+
+def delete_url(url_id):
+    response = requests.delete(
+        f'https://your-zipline-instance.com/api/user/urls/{url_id}',
+        headers={'Authorization': 'your-api-token'}
+    )
+    response.raise_for_status()
+    return response.json()
+```
+
+## Example Response
+
+```json 200 OK
+{
+  "id": "clx1234567890",
+  "code": "abc123",
+  "vanity": "docs",
+  "destination": "https://zipline.diced.sh/docs",
+  "views": 42,
+  "maxViews": null,
+  "enabled": true,
+  "createdAt": "2024-03-01T10:30:00.000Z",
+  "updatedAt": "2024-03-01T10:30:00.000Z",
+  "userId": "user123"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "URL not found",
+  "statusCode": 404
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid authorization token",
+  "statusCode": 401
+}
+```
+
+## Notes
+
+- You can only delete URLs you own
+- Deletion is permanent and cannot be undone
+- Once deleted, the URL will no longer redirect
+- The vanity string and code become available for reuse after deletion
+- Analytics and view counts for the deleted URL are not preserved
+- The response includes the full URL object for your records before it's permanently removed

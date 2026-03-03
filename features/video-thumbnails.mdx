@@ -1,0 +1,332 @@
+---
+title: Video Thumbnails
+description: Automatically generate thumbnails for uploaded video files
+---
+
+Zipline can automatically generate thumbnail images from video files, making it easier to preview video content before playing.
+
+## Overview
+
+When a video is uploaded, Zipline extracts a frame from the video and saves it as a thumbnail image. This allows users to see a preview of the video content in galleries and file listings.
+
+## Configuration
+
+Enable video thumbnails in your database configuration:
+
+```prisma
+model Zipline {
+  featuresThumbnailsEnabled       Boolean @default(true)
+  featuresThumbnailsNumberThreads Int     @default(4)
+  featuresThumbnailsFormat        String  @default("jpg")
+  
+  tasksThumbnailsInterval         String  @default("30m")
+  tasksCleanThumbnailsInterval    String  @default("1d")
+}
+```
+
+- **featuresThumbnailsEnabled**: Enable/disable thumbnail generation
+- **featuresThumbnailsNumberThreads**: Number of worker threads for processing
+- **featuresThumbnailsFormat**: Output format (jpg, png, webp)
+- **tasksThumbnailsInterval**: How often to check for videos needing thumbnails
+- **tasksCleanThumbnailsInterval**: How often to clean up orphaned thumbnails
+
+## How It Works
+
+### Thumbnail Generation Process
+
+<Steps>
+  <Step title="Video Upload">
+    When a video file is uploaded, it's stored in the database with type `video/*`.
+  </Step>
+  
+  <Step title="Background Processing">
+    A background task runs every 30 minutes (configurable) to find videos without thumbnails.
+  </Step>
+  
+  <Step title="Worker Distribution">
+    Videos are distributed across multiple worker threads for parallel processing.
+  </Step>
+  
+  <Step title="Frame Extraction">
+    Each worker extracts a frame from the video and saves it as a thumbnail.
+  </Step>
+  
+  <Step title="Database Update">
+    The thumbnail path is saved to the database, linked to the original video file.
+  </Step>
+</Steps>
+
+### Implementation Reference
+
+The thumbnail task scheduler is in `src/lib/tasks/run/thumbnails.ts:3`:
+
+```typescript
+export default function thumbnails(prisma: typeof globalThis.__db__) {
+  return async function (this: IntervalTask, rerun = false) {
+    // Find worker threads for thumbnail generation
+    const thumbnailWorkers = this.tasks.tasks.filter(
+      (x) => 'worker' in x && x.id.startsWith('thumbnail'),
+    ) as unknown as WorkerTask[];
+    
+    if (!thumbnailWorkers.length) return;
+    
+    // Find videos that need thumbnails
+    const thumbnailNeeded = await prisma.file.findMany({
+      where: {
+        ...(rerun ? {} : { thumbnail: { is: null } }),
+        type: {
+          startsWith: 'video/',
+        },
+      },
+    });
+    
+    if (!thumbnailNeeded.length) return;
+    
+    // Distribute work across workers
+    let workerIndex = 0;
+    for (const file of thumbnailNeeded) {
+      thumbToWorker.push({
+        id: file.id,
+        worker: workerIndex,
+      });
+      
+      workerIndex = (workerIndex + 1) % thumbnailWorkers.length;
+    }
+    
+    // Send work to each worker
+    for (let i = 0; i !== thumbnailWorkers.length; ++i) {
+      if (!ids[i].length) continue;
+      
+      thumbnailWorkers[i].worker!.postMessage({
+        type: 0,
+        data: ids[i],
+      });
+    }
+  };
+}
+```
+
+## Database Schema
+
+Thumbnails are stored in the `Thumbnail` model:
+
+```prisma
+model Thumbnail {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  path String  // Path to thumbnail file
+  
+  file   File   @relation(fields: [fileId], references: [id])
+  fileId String
+  
+  @@unique([fileId])
+}
+```
+
+Each video file can have one thumbnail:
+
+```prisma
+model File {
+  id        String    @id @default(cuid())
+  name      String
+  type      String    // e.g., "video/mp4"
+  
+  thumbnail Thumbnail?
+}
+```
+
+## Worker Threads
+
+Zipline uses worker threads to process thumbnails in parallel:
+
+```typescript
+interface WorkerTask {
+  id: string;
+  worker: Worker;  // Node.js Worker thread
+}
+
+// Example: 4 threads processing 12 videos
+// Worker 0: videos [1, 5, 9]
+// Worker 1: videos [2, 6, 10]
+// Worker 2: videos [3, 7, 11]
+// Worker 3: videos [4, 8, 12]
+```
+
+This distributes the workload evenly and processes multiple videos simultaneously.
+
+## Supported Video Formats
+
+Thumbnails can be generated from any video format with MIME type starting with `video/`:
+
+- **MP4** (video/mp4)
+- **WebM** (video/webm)
+- **AVI** (video/x-msvideo)
+- **MOV** (video/quicktime)
+- **MKV** (video/x-matroska)
+- **FLV** (video/x-flv)
+- And more...
+
+## Thumbnail Formats
+
+Thumbnails can be saved in multiple formats:
+
+<CardGroup cols={3}>
+  <Card title="JPEG" icon="image">
+    Default format, best compatibility and small file size
+  </Card>
+  <Card title="PNG" icon="image">
+    Lossless format, larger file size
+  </Card>
+  <Card title="WebP" icon="image">
+    Modern format with good compression
+  </Card>
+</CardGroup>
+
+## File Naming
+
+Thumbnail files are stored with a prefix:
+
+```
+.thumbnail.[fileId].[format]
+```
+
+For example:
+- Original video: `abc123.mp4`
+- Thumbnail: `.thumbnail.clx1234567890.jpg`
+
+## Thumbnail Cleanup
+
+The cleanup task runs daily to remove orphaned thumbnails:
+
+```typescript
+// Find thumbnails on filesystem
+const fsThumbnails = await datasource.list({ prefix: '.thumbnail.' });
+
+// Find thumbnails in database
+const dbThumbnails = await prisma.thumbnail.findMany();
+
+// Remove orphaned thumbnails (in filesystem but not in DB)
+for (const path of fsThumbnails) {
+  const existsInDb = dbThumbnails.some(t => t.path === path);
+  if (!existsInDb) {
+    await datasource.delete(path);
+  }
+}
+
+// Remove orphaned DB entries (in DB but not in filesystem)
+for (const thumb of dbThumbnails) {
+  const existsOnFs = fsThumbnails.includes(thumb.path);
+  if (!existsOnFs) {
+    await prisma.thumbnail.delete({ where: { id: thumb.id } });
+  }
+}
+```
+
+This ensures your storage stays clean and doesn't accumulate orphaned files.
+
+## API Access
+
+Thumbnails are automatically included in file responses:
+
+```json
+{
+  "id": "clx1234567890",
+  "name": "video.mp4",
+  "type": "video/mp4",
+  "size": 52428800,
+  "thumbnail": {
+    "id": "clx9876543210",
+    "path": ".thumbnail.clx1234567890.jpg",
+    "createdAt": "2024-01-20T10:35:00.000Z"
+  }
+}
+```
+
+Access the thumbnail via:
+
+```
+https://your-domain.com/u/.thumbnail.clx1234567890.jpg
+```
+
+## Regenerating Thumbnails
+
+To regenerate all thumbnails (e.g., after changing format or quality):
+
+```typescript
+// Call the task with rerun=true
+await thumbnails(prisma).call(intervalTask, true);
+```
+
+This processes all videos, even those that already have thumbnails.
+
+## Performance Considerations
+
+### Processing Time
+
+Thumbnail generation time depends on:
+
+- **Video length**: Longer videos may take more time
+- **Video resolution**: Higher resolution requires more processing
+- **Video codec**: Some codecs are faster to decode
+- **Server CPU**: More cores allow more parallel processing
+
+Typical times:
+- **Short video (under 1 min, 720p)**: 1-3 seconds
+- **Medium video (5 min, 1080p)**: 3-5 seconds
+- **Long video (30 min, 4K)**: 5-10 seconds
+
+### Resource Usage
+
+Worker threads consume:
+
+- **CPU**: Each worker uses 1 CPU core
+- **Memory**: ~100-300MB per worker
+- **Disk I/O**: Reading video files and writing thumbnails
+
+<Note>
+Recommended thread count:
+- **2-4 cores**: 2 threads
+- **4-8 cores**: 4 threads
+- **8+ cores**: 6-8 threads
+</Note>
+
+### Storage Impact
+
+Thumbnails add minimal storage overhead:
+
+- **JPEG thumbnail (1920x1080)**: ~100-300KB
+- **PNG thumbnail (1920x1080)**: ~500KB-1MB
+- **WebP thumbnail (1920x1080)**: ~50-200KB
+
+## Troubleshooting
+
+### Thumbnails Not Generating
+
+1. Check that `featuresThumbnailsEnabled` is `true`
+2. Verify worker threads are starting (check logs)
+3. Ensure ffmpeg is installed on the server
+4. Check file permissions on video files
+5. Look for errors in server logs
+
+### Poor Quality Thumbnails
+
+- Increase thumbnail resolution settings
+- Change format from JPG to PNG
+- Extract a frame from later in the video
+- Verify the source video quality is good
+
+### High CPU Usage
+
+- Reduce `featuresThumbnailsNumberThreads`
+- Increase `tasksThumbnailsInterval` to process less frequently
+- Limit maximum video file size
+- Consider processing during off-peak hours
+
+### Orphaned Thumbnails
+
+- Run the cleanup task manually
+- Reduce `tasksCleanThumbnailsInterval` to clean more often
+- Check for errors in the cleanup task logs
+- Verify database and filesystem are in sync

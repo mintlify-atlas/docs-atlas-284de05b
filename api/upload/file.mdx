@@ -1,0 +1,314 @@
+---
+title: Upload File
+description: Upload files to Zipline with multipart form data
+---
+
+Upload one or more files to Zipline. This endpoint accepts multipart form data and returns URLs for the uploaded files.
+
+## Endpoint
+
+```
+POST /api/upload
+```
+
+## Authentication
+
+Requires authentication via Bearer token in the `Authorization` header.
+
+```
+Authorization: Bearer <your-token>
+```
+
+## Request
+
+### Multipart Form Data
+
+Send files as `multipart/form-data` with one or more file fields.
+
+### Headers
+
+All upload options are configured via custom headers:
+
+<ParamField header="X-Zipline-Format" type="string" default="random">
+  Filename format to use. Options: `random`, `uuid`, `date`, `name`, `gfycat`, `random-words`.
+  
+  ```bash
+  X-Zipline-Format: uuid
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Filename" type="string">
+  Override the generated filename (without extension).
+  
+  ```bash
+  X-Zipline-Filename: my-custom-name
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-File-Extension" type="string">
+  Override the file extension.
+  
+  ```bash
+  X-Zipline-File-Extension: .png
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Domain" type="string">
+  Override the return domain. Supports multiple domains separated by commas (randomly selected).
+  
+  ```bash
+  X-Zipline-Domain: files.example.com,cdn.example.com
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Deletes-At" type="string">
+  Set file expiration. Accepts:
+  - Human-readable duration: `1d`, `7d`, `30m`, `2h`
+  - ISO date: `date=2024-12-31T23:59:59Z`
+  - Never expire: `never`
+  
+  ```bash
+  X-Zipline-Deletes-At: 7d
+  ```
+  
+  <Note>
+    If server has `maxExpiration` configured, requests exceeding this limit will be rejected.
+  </Note>
+</ParamField>
+
+<ParamField header="X-Zipline-Password" type="string">
+  Protect file with a password. Users must enter this password to view the file.
+  
+  ```bash
+  X-Zipline-Password: secret123
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Max-Views" type="number">
+  Maximum number of views before file is deleted.
+  
+  ```bash
+  X-Zipline-Max-Views: 10
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Original-Name" type="boolean" default="false">
+  Store the original filename for reference.
+  
+  ```bash
+  X-Zipline-Original-Name: true
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Folder" type="string">
+  Upload to a specific folder ID.
+  
+  ```bash
+  X-Zipline-Folder: clx7g8kj30001...
+  ```
+  
+  <Note>
+    Folder must allow uploads if uploading without authentication.
+  </Note>
+</ParamField>
+
+<ParamField header="X-Zipline-Image-Compression-Percent" type="number">
+  Compress images by the specified percentage (0-100). Only works for image files.
+  
+  ```bash
+  X-Zipline-Image-Compression-Percent: 80
+  ```
+</ParamField>
+
+<ParamField header="X-Zipline-Image-Compression-Type" type="string">
+  Image compression format. Options: `webp`, `jpeg`, `png`, `avif`.
+  
+  ```bash
+  X-Zipline-Image-Compression-Type: webp
+  ```
+  
+  <Warning>
+    Compression type must be supported by the server's installed dependencies.
+  </Warning>
+</ParamField>
+
+<ParamField header="X-Zipline-No-Json" type="boolean" default="false">
+  Return plain text URLs (comma-separated) instead of JSON response.
+  
+  ```bash
+  X-Zipline-No-Json: true
+  ```
+</ParamField>
+
+## Response
+
+### JSON Response (default)
+
+<ResponseField name="files" type="array" required>
+  Array of uploaded file objects.
+  
+  <ResponseField name="files[].id" type="string" required>
+    Unique file identifier.
+  </ResponseField>
+  
+  <ResponseField name="files[].name" type="string" required>
+    Generated filename with extension.
+  </ResponseField>
+  
+  <ResponseField name="files[].type" type="string" required>
+    MIME type of the file.
+  </ResponseField>
+  
+  <ResponseField name="files[].url" type="string" required>
+    Full URL to access the file.
+  </ResponseField>
+  
+  <ResponseField name="files[].removedGps" type="boolean">
+    Whether GPS metadata was removed (if enabled in server config).
+  </ResponseField>
+  
+  <ResponseField name="files[].compressed" type="object">
+    Compression details if image was compressed.
+    
+    <ResponseField name="files[].compressed.ext" type="string">
+      New file extension after compression.
+    </ResponseField>
+    
+    <ResponseField name="files[].compressed.mimetype" type="string">
+      New MIME type after compression.
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="deletesAt" type="string">
+  ISO 8601 timestamp when files will be deleted, or `"never"` if no expiration.
+</ResponseField>
+
+<ResponseField name="assumedMimetypes" type="boolean[]">
+  Array indicating which files had assumed MIME types (if server has `assumeMimetypes` enabled).
+</ResponseField>
+
+### Plain Text Response
+
+When `X-Zipline-No-Json: true` is set, returns comma-separated URLs:
+
+```
+https://files.example.com/abc123.png,https://files.example.com/def456.jpg
+```
+
+## Examples
+
+### Basic Upload
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@/path/to/image.png"
+```
+
+### Upload with Expiration
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "X-Zipline-Deletes-At: 7d" \
+  -F "file=@/path/to/document.pdf"
+```
+
+### Upload with Compression
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "X-Zipline-Image-Compression-Type: webp" \
+  -H "X-Zipline-Image-Compression-Percent: 80" \
+  -F "file=@/path/to/photo.jpg"
+```
+
+### Upload Multiple Files
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file1=@/path/to/image1.png" \
+  -F "file2=@/path/to/image2.jpg" \
+  -F "file3=@/path/to/document.pdf"
+```
+
+### Password Protected Upload
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "X-Zipline-Password: secret123" \
+  -H "X-Zipline-Max-Views: 10" \
+  -F "file=@/path/to/sensitive.pdf"
+```
+
+### Upload to Folder
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "X-Zipline-Folder: clx7g8kj30001abc123" \
+  -F "file=@/path/to/file.txt"
+```
+
+## Response Example
+
+```json
+{
+  "files": [
+    {
+      "id": "clx7g8kj30001abc123xyz",
+      "name": "a8c3e9f2.png",
+      "type": "image/png",
+      "url": "https://files.example.com/a8c3e9f2.png",
+      "removedGps": true
+    },
+    {
+      "id": "clx7h9kl40002def456uvw",
+      "name": "b7d4f0g3.webp",
+      "type": "image/webp",
+      "url": "https://files.example.com/b7d4f0g3.webp",
+      "compressed": {
+        "ext": ".webp",
+        "mimetype": "image/webp"
+      }
+    }
+  ],
+  "deletesAt": "2024-12-31T23:59:59.000Z"
+}
+```
+
+## Error Responses
+
+### 400 Bad Request
+
+- Invalid header values
+- Disabled file extension
+- Invalid filename characters
+- Unrecognized MIME type (when `assumeMimetypes` is enabled)
+
+### 403 Forbidden
+
+- Folder not open for uploads
+
+### 413 Payload Too Large
+
+- File exceeds `maxFileSize` limit
+- Upload would exceed user quota
+
+## Notes
+
+<Note>
+  Files are validated against the server's `disabledExtensions` list. Check your server configuration for allowed file types.
+</Note>
+
+<Note>
+  GPS metadata is automatically removed from images if `removeGpsMetadata` is enabled in server configuration.
+</Note>
+
+<Warning>
+  Partial uploads (chunked uploads) should use the `/api/upload/partial` endpoint instead.
+</Warning>

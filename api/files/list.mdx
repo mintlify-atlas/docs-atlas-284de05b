@@ -1,0 +1,272 @@
+---
+title: List Files
+description: Retrieve a paginated list of files with filtering and search capabilities
+---
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://your-zipline.com/api/user/files?page=1&perpage=15" \
+  -H "Authorization: YOUR_TOKEN"
+```
+</RequestExample>
+
+## GET /api/user/files
+
+Retrieve a paginated list of files with support for filtering, sorting, and searching.
+
+### Query Parameters
+
+<ParamField query="page" type="number" required>
+  Page number for pagination (1-indexed)
+</ParamField>
+
+<ParamField query="perpage" type="number" default="15">
+  Number of files per page
+</ParamField>
+
+<ParamField query="filter" type="enum" default="none">
+  Filter files by type
+  
+  <Expandable title="Filter options">
+    - `dashboard` - Only media files (image, video, audio, text)
+    - `none` - No filter applied
+    - `all` - All files including favorites
+  </Expandable>
+</ParamField>
+
+<ParamField query="favorite" type="boolean" default="false">
+  Filter to show only favorited files
+</ParamField>
+
+<ParamField query="sortBy" type="enum" default="createdAt">
+  Field to sort files by
+  
+  <Expandable title="Sort options">
+    - `id` - File ID
+    - `createdAt` - Creation date
+    - `updatedAt` - Last update date
+    - `deletesAt` - Scheduled deletion date
+    - `name` - File name
+    - `originalName` - Original file name
+    - `size` - File size
+    - `type` - MIME type
+    - `views` - View count
+    - `favorite` - Favorite status
+  </Expandable>
+</ParamField>
+
+<ParamField query="order" type="enum" default="desc">
+  Sort order
+  - `asc` - Ascending
+  - `desc` - Descending
+</ParamField>
+
+<ParamField query="searchField" type="enum" default="name">
+  Field to search in
+  
+  <Expandable title="Search fields">
+    - `name` - File name on server
+    - `originalName` - Original uploaded file name
+    - `type` - MIME type
+    - `tags` - Tag IDs (comma-separated)
+    - `id` - File ID
+  </Expandable>
+</ParamField>
+
+<ParamField query="searchQuery" type="string">
+  Search query string. When searching by tags, use comma-separated tag IDs
+</ParamField>
+
+<ParamField query="id" type="string">
+  Filter files by a specific user ID (requires permission)
+</ParamField>
+
+<ParamField query="folder" type="string">
+  Filter files by folder ID
+</ParamField>
+
+### Response
+
+<ResponseField name="page" type="array">
+  Array of file objects
+  
+  <Expandable title="File object">
+    <ResponseField name="id" type="string">
+      Unique file identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      File name on server
+    </ResponseField>
+    
+    <ResponseField name="originalName" type="string | null">
+      Original name of the uploaded file
+    </ResponseField>
+    
+    <ResponseField name="size" type="number">
+      File size in bytes
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      MIME type of the file
+    </ResponseField>
+    
+    <ResponseField name="views" type="number">
+      Number of times the file has been viewed
+    </ResponseField>
+    
+    <ResponseField name="maxViews" type="number | null">
+      Maximum allowed views before deletion
+    </ResponseField>
+    
+    <ResponseField name="favorite" type="boolean">
+      Whether the file is marked as favorite
+    </ResponseField>
+    
+    <ResponseField name="password" type="boolean">
+      Whether the file is password-protected
+    </ResponseField>
+    
+    <ResponseField name="folderId" type="string | null">
+      ID of the folder containing this file
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of file creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+    
+    <ResponseField name="deletesAt" type="string | null">
+      ISO 8601 timestamp of scheduled deletion
+    </ResponseField>
+    
+    <ResponseField name="url" type="string">
+      Full URL to access the file
+    </ResponseField>
+    
+    <ResponseField name="thumbnail" type="object | null">
+      Thumbnail information if available
+      
+      <ResponseField name="path" type="string">
+        Path to the thumbnail file
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="tags" type="array">
+      Array of tag objects
+      
+      <ResponseField name="id" type="string">
+        Tag ID
+      </ResponseField>
+      
+      <ResponseField name="name" type="string">
+        Tag name
+      </ResponseField>
+      
+      <ResponseField name="color" type="string">
+        Tag color (hex code)
+      </ResponseField>
+      
+      <ResponseField name="createdAt" type="string">
+        ISO 8601 timestamp
+      </ResponseField>
+      
+      <ResponseField name="updatedAt" type="string">
+        ISO 8601 timestamp
+      </ResponseField>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of files matching the query (only present without search)
+</ResponseField>
+
+<ResponseField name="pages" type="number">
+  Total number of pages (only present without search)
+</ResponseField>
+
+<ResponseField name="search" type="object">
+  Search metadata (only present when searching)
+  
+  <ResponseField name="field" type="string">
+    The field that was searched
+  </ResponseField>
+  
+  <ResponseField name="query" type="string | string[]">
+    The search query (array when searching tags)
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "page": [
+    {
+      "id": "clxyz123",
+      "name": "abc123.png",
+      "originalName": "screenshot.png",
+      "size": 152400,
+      "type": "image/png",
+      "views": 42,
+      "maxViews": null,
+      "favorite": false,
+      "password": false,
+      "folderId": null,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z",
+      "deletesAt": null,
+      "url": "https://your-zipline.com/u/abc123.png",
+      "thumbnail": {
+        "path": "/thumbnails/abc123.jpg"
+      },
+      "tags": [
+        {
+          "id": "tag1",
+          "name": "screenshots",
+          "color": "#3b82f6",
+          "createdAt": "2024-01-10T08:00:00.000Z",
+          "updatedAt": "2024-01-10T08:00:00.000Z"
+        }
+      ]
+    }
+  ],
+  "total": 150,
+  "pages": 10
+}
+```
+
+### Search Example Response
+
+```json
+{
+  "page": [
+    {
+      "id": "clxyz123",
+      "name": "screenshot-2024.png",
+      "originalName": "screenshot.png",
+      "size": 152400,
+      "type": "image/png",
+      "views": 42,
+      "maxViews": null,
+      "favorite": false,
+      "password": false,
+      "folderId": null,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z",
+      "deletesAt": null,
+      "url": "https://your-zipline.com/u/screenshot-2024.png",
+      "thumbnail": null,
+      "tags": []
+    }
+  ],
+  "search": {
+    "field": "originalName",
+    "query": "screenshot"
+  }
+}
+```

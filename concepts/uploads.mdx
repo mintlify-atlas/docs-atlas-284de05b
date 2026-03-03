@@ -1,0 +1,277 @@
+---
+title: Uploads
+description: Learn how file uploads work in Zipline, including upload methods, file processing, and configuration options
+---
+
+Zipline provides a robust file upload system that supports both single and multi-file uploads, with features like image compression, GPS metadata removal, and automatic expiration.
+
+## How uploads work
+
+When you upload a file to Zipline, the following process occurs:
+
+1. **File reception** - The server receives your file and saves it to a temporary directory
+2. **Validation** - The file is checked against quotas, size limits, and disabled extensions
+3. **Processing** - Optional processing like image compression or GPS removal is applied
+4. **Filename generation** - A unique filename is generated based on your configured format
+5. **Storage** - The file is moved to your configured datasource (local or S3)
+6. **Database record** - File metadata is saved to the database
+7. **URL generation** - A shareable URL is returned
+
+## Upload methods
+
+### Web dashboard
+
+The easiest way to upload files is through the web interface:
+
+1. Navigate to your Zipline dashboard
+2. Click the upload button or drag and drop files
+3. Configure optional settings (folder, expiration, password protection)
+4. Click "Upload" to complete the process
+
+### API upload
+
+For automation and integration with tools like ShareX, use the upload API:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: YOUR_TOKEN" \
+  -F "file=@/path/to/file.png"
+```
+
+### ShareX integration
+
+Zipline is fully compatible with ShareX. Download your ShareX configuration from the dashboard to get started.
+
+## File processing
+
+### Image compression
+
+Zipline can automatically compress images during upload to save storage space:
+
+<Info>
+Image compression is configured server-wide and can be customized per-upload using the `X-Zipline-Image-Compression` header.
+</Info>
+
+The compression process:
+- Detects image files by MIME type (`image/*`)
+- Applies quality settings (default format is JPG)
+- Stores the compressed version instead of the original
+- Returns compression statistics in the API response
+
+See the implementation in `src/server/routes/api/upload/index.ts:110-124`.
+
+### GPS metadata removal
+
+For privacy, Zipline can automatically strip GPS data from images:
+
+```typescript
+// Configured server-wide
+featuresRemoveGpsMetadata: true
+```
+
+This removes EXIF GPS coordinates from uploaded images before storage.
+
+## Upload configuration
+
+### File naming formats
+
+Zipline supports multiple filename generation strategies:
+
+- **Random** - Random alphanumeric characters (default)
+- **Date** - Timestamp-based names using the configured date format
+- **UUID** - Universally unique identifiers
+- **Name** - Original filename (sanitized)
+- **Random words** - Human-readable random words
+
+Configure the default format:
+
+```typescript
+filesDefaultFormat: "random"
+filesLength: 6  // For random format
+```
+
+### File restrictions
+
+#### Size limits
+
+```typescript
+filesMaxFileSize: "100mb"  // Per-file limit
+```
+
+Uploads exceeding this limit will be rejected with a 413 error.
+
+#### Disabled extensions
+
+```typescript
+filesDisabledExtensions: [".exe", ".bat", ".sh"]
+```
+
+Prevent specific file types from being uploaded for security.
+
+### Expiration
+
+Files can automatically delete after a specified time:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Expires: 24h" \
+  -F "file=@screenshot.png"
+```
+
+Supported formats: `1h`, `24h`, `7d`, `30d`, or `never`.
+
+Configuration:
+```typescript
+filesDefaultExpiration: "7d"  // Default for all uploads
+filesMaxExpiration: "30d"     // Maximum allowed expiration
+```
+
+## Upload options
+
+### Password protection
+
+Protect files with a password:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Password: secret123" \
+  -F "file=@document.pdf"
+```
+
+Viewers will need to enter the password to access the file.
+
+### Max views
+
+Automatically delete files after a certain number of views:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Max-Views: 10" \
+  -F "file=@secret.png"
+```
+
+After 10 views, the file will be automatically deleted (if `featuresDeleteOnMaxViews` is enabled).
+
+### Folder upload
+
+Organize uploads by uploading directly to a folder:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Folder: folder_id_here" \
+  -F "file=@report.pdf"
+```
+
+See [Folders](/concepts/folders) for more details.
+
+### Original filename
+
+Preserve the original filename for downloads:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "X-Zipline-Original-Name: true" \
+  -F "file=@important.docx"
+```
+
+The original filename is sanitized and stored in the database.
+
+## Chunked uploads
+
+For large files, Zipline supports chunked (partial) uploads:
+
+<Note>
+Chunked uploads are handled by `/api/upload/partial` and allow uploading files in multiple pieces.
+</Note>
+
+Configuration:
+```typescript
+chunksEnabled: true
+chunksMax: "95mb"    // Maximum total file size
+chunksSize: "25mb"   // Size per chunk
+```
+
+The chunked upload process:
+1. Client splits large file into chunks
+2. Each chunk is uploaded with range headers
+3. Server reassembles chunks in a worker thread
+4. Final file is processed and stored
+
+See `src/server/routes/api/upload/partial.ts` for implementation details.
+
+## Quotas
+
+Users can have upload quotas configured:
+
+- **By bytes** - Total storage limit (e.g., "10GB")
+- **By files** - Maximum number of files (e.g., 1000)
+- **URLs** - Maximum number of shortened URLs
+
+Quotas are checked before upload acceptance. See the implementation in `src/lib/api/upload/checkQuota`.
+
+## Response format
+
+Successful uploads return:
+
+```json
+{
+  "files": [
+    {
+      "id": "clx1234567890",
+      "name": "abc123.png",
+      "type": "image/png",
+      "url": "https://your-zipline.com/u/abc123.png",
+      "removedGps": true,
+      "compressed": {
+        "size": 45678,
+        "ext": "jpg",
+        "mimetype": "image/jpeg"
+      }
+    }
+  ],
+  "deletesAt": "2026-03-10T12:00:00.000Z"
+}
+```
+
+## Anonymous uploads
+
+If a folder has `allowUploads` enabled, anonymous users can upload to it without authentication:
+
+```bash
+curl -X POST https://your-zipline.com/api/upload \
+  -H "X-Zipline-Folder: public_folder_id" \
+  -F "file=@submission.pdf"
+```
+
+Files uploaded anonymously are owned by the folder owner.
+
+## FAQs
+
+<AccordionGroup>
+  <Accordion title="What happens if I upload a file that already exists?">
+    Each upload generates a new unique filename, so duplicate files won't overwrite existing ones. However, if you use the `name` format with the same filename, the database will create a new record but the physical file may be overwritten in storage.
+  </Accordion>
+
+  <Accordion title="Can I change the file after upload?">
+    No, files are immutable after upload. You can update metadata (like password, expiration) but not the file contents. Upload a new file if you need to make changes.
+  </Accordion>
+
+  <Accordion title="What's the difference between /u and /raw routes?">
+    The `/u` route (configurable via `filesRoute`) may redirect to a view page if the user has embeds enabled or the file requires a password. The `/raw` route always returns the raw file content.
+  </Accordion>
+
+  <Accordion title="How do I enable image compression?">
+    Image compression is controlled by the `featuresImageCompression` setting. It can be enabled server-wide or per-upload using the `X-Zipline-Image-Compression` header with quality percentage.
+  </Accordion>
+</AccordionGroup>
+
+## See also
+
+- [Folders](/concepts/folders) - Organize your uploads
+- [Storage](/concepts/storage) - Configure where files are stored
+- [Embeds](/concepts/embeds) - Customize file previews

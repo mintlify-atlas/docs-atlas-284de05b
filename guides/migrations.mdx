@@ -1,0 +1,454 @@
+---
+title: Migration Guide
+description: Migrate data from Zipline v3 or another Zipline v4 instance
+---
+
+Zipline v4 includes built-in migration tools to import data from Zipline v3 or transfer data between Zipline v4 instances.
+
+## Migration Overview
+
+Zipline supports two migration paths:
+
+- **v3 to v4**: Migrate from Zipline v3 to v4 (complete rewrite)
+- **v4 to v4**: Transfer data between v4 instances
+
+<Warning>
+  Zipline v4 was a complete rewrite. There is no direct upgrade path from v3 - you must export data from v3 and import it into v4.
+</Warning>
+
+## Before You Begin
+
+<Note>
+  - Migrations must be performed by a **SUPERADMIN** user
+  - Large exports (>1GB) may take significant time and memory
+  - The import endpoint has a 24GB body size limit (~/workspace/source/src/server/routes/api/server/import/v3.ts:36)
+  - Test migrations on a staging environment first
+</Note>
+
+## Migrating from Zipline v3 to v4
+
+<Steps>
+  <Step title="Export data from Zipline v3">
+    In your Zipline v3 instance:
+
+    1. Log in as an administrator
+    2. Navigate to **Manage** → **Export**
+    3. Select what to export:
+       - Users
+       - Files
+       - Folders
+       - URLs
+       - Settings
+    4. Click **Export Data**
+    5. Download the export JSON file
+
+    <Tip>
+      The export includes metadata only. You'll need to transfer actual files separately.
+    </Tip>
+  </Step>
+
+  <Step title="Transfer file storage">
+    Copy your files from the v3 uploads directory to the v4 uploads directory:
+
+    **Local storage:**
+    ```bash
+    # From v3 uploads to v4 uploads
+    cp -r /path/to/zipline-v3/uploads/* /path/to/zipline-v4/uploads/
+    ```
+
+    **S3 storage:**
+    ```bash
+    # Files can remain in the same bucket
+    # Just configure v4 to use the same S3 bucket and credentials
+    ```
+
+    <Warning>
+      Ensure file names are preserved exactly. Zipline uses the file name from the database to locate files.
+    </Warning>
+  </Step>
+
+  <Step title="Set up Zipline v4">
+    Deploy Zipline v4 following the [installation guide](/get-started/docker).
+
+    Ensure you have:
+    - A fresh v4 instance running
+    - A SUPERADMIN user created
+    - Access to the admin panel
+  </Step>
+
+  <Step title="Import data into v4">
+    Use the v3 import API endpoint:
+
+    ```bash
+    curl -X POST https://your-zipline-v4.com/api/server/import/v3 \
+      -H "Authorization: YOUR_ADMIN_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d @export-v3.json
+    ```
+
+    Or import via the admin dashboard if available.
+
+    <Note>
+      The import process maps v3 data structures to v4:
+      - Users (with passwords, OAuth, TOTP)
+      - Files (with metadata, views, expiration)
+      - Folders (with file associations)
+      - URLs (shortened links)
+      
+      See implementation: ~/workspace/source/src/server/routes/api/server/import/v3.ts
+    </Note>
+  </Step>
+
+  <Step title="Verify the migration">
+    After import completes:
+
+    1. Check the API response for import statistics:
+       ```json
+       {
+         "users": {"old_id": "new_id", ...},
+         "files": {"old_id": "new_id", ...},
+         "folders": {"old_id": "new_id", ...},
+         "urls": {"old_id": "new_id", ...}
+       }
+       ```
+
+    2. Log in with your v3 credentials
+    3. Verify files are accessible
+    4. Check folders and organization
+    5. Test shortened URLs
+  </Step>
+
+  <Step title="Handle conflicts">
+    If users or files already exist, they will be skipped:
+
+    - **Users**: Skipped if username already exists
+    - **Files**: Skipped if file name already exists
+    - **URLs**: Skipped if URL code already exists
+    - **OAuth providers**: Skipped if OAuth ID already exists
+
+    Check logs for warnings about skipped items:
+    ```bash
+    docker compose logs zipline | grep "skipping importing"
+    ```
+  </Step>
+</Steps>
+
+### Merge Import Option
+
+You can import v3 data into an existing v4 user account:
+
+```bash
+curl -X POST https://your-zipline-v4.com/api/server/import/v3 \
+  -H "Authorization: YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "export3": {...},
+    "importFromUser": "old_user_id_from_v3_export"
+  }'
+```
+
+This merges the v3 user's data into your current SUPERADMIN account.
+
+## Migrating Between Zipline v4 Instances
+
+Use this to transfer data between v4 instances or for backups.
+
+<Steps>
+  <Step title="Export from source v4 instance">
+    Use the export API endpoint:
+
+    ```bash
+    curl -X POST https://source-instance.com/api/server/export \
+      -H "Authorization: YOUR_ADMIN_TOKEN" \
+      -o export-v4.json
+    ```
+
+    This exports:
+    - Users
+    - OAuth providers
+    - User quotas
+    - Passkeys
+    - Folders (with hierarchy)
+    - Files
+    - Tags
+    - URLs
+    - Invites
+    - Metrics (if enabled)
+  </Step>
+
+  <Step title="Transfer files">
+    **Local storage:**
+    ```bash
+    rsync -avz /source/uploads/ /destination/uploads/
+    ```
+
+    **S3 storage:**
+    ```bash
+    # Between different buckets
+    aws s3 sync s3://source-bucket s3://destination-bucket
+
+    # Or configure destination to use the same bucket
+    ```
+  </Step>
+
+  <Step title="Import to destination v4 instance">
+    ```bash
+    curl -X POST https://destination-instance.com/api/server/import/v4 \
+      -H "Authorization: YOUR_ADMIN_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d @export-v4.json
+    ```
+
+    With configuration options:
+
+    ```bash
+    curl -X POST https://destination-instance.com/api/server/import/v4 \
+      -H "Authorization: YOUR_ADMIN_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "export4": {...},
+        "config": {
+          "settings": false,
+          "mergeCurrentUser": "user_id_to_merge_into"
+        }
+      }'
+    ```
+
+    **Config options:**
+    - `settings`: Import instance settings (default: false)
+    - `mergeCurrentUser`: Merge specified user into current admin account
+  </Step>
+
+  <Step title="Verify import">
+    The API returns import statistics:
+
+    ```json
+    {
+      "imported": {
+        "users": 5,
+        "oauthProviders": 3,
+        "quotas": 2,
+        "passkeys": 1,
+        "folders": 10,
+        "files": 1523,
+        "tags": 15,
+        "urls": 42,
+        "invites": 3,
+        "metrics": 1000
+      }
+    }
+    ```
+
+    Verify:
+    - User count matches
+    - Files are accessible
+    - Folder hierarchy is preserved
+    - Tags are assigned correctly
+  </Step>
+</Steps>
+
+## Import Behavior
+
+### Conflict Resolution
+
+When importing data, conflicts are handled as follows:
+
+<AccordionGroup>
+  <Accordion title="Users">
+    **v3 import**: Skipped if username exists (~/workspace/source/src/server/routes/api/server/import/v3.ts:69-76)
+
+    **v4 import**: Skipped if username OR user ID exists (~/workspace/source/src/server/routes/api/server/import/v4.ts:68-80)
+
+    **Tokens**: New tokens are generated for imported users
+  </Accordion>
+
+  <Accordion title="Files">
+    **Both imports**: Skipped if file name already exists
+
+    File metadata imported:
+    - Original name
+    - Size and type
+    - Views and max views
+    - Deletion timestamp
+    - Password protection
+    - Favorite status
+  </Accordion>
+
+  <Accordion title="Folders">
+    **v3 import**: Skipped if files for folder not found
+
+    **v4 import**: Skipped if folder name exists for user
+
+    **Hierarchy**: Parent-child relationships are preserved in v4 imports (~/workspace/source/src/server/routes/api/server/import/v4.ts:298-314)
+  </Accordion>
+
+  <Accordion title="URLs">
+    **Both imports**: Skipped if URL code already exists
+
+    URL properties imported:
+    - Destination
+    - Vanity code
+    - Views and max views
+    - Password
+    - Enabled status
+  </Accordion>
+
+  <Accordion title="OAuth Providers">
+    **Both imports**: Skipped if provider + OAuth ID combination exists
+
+    Imported providers:
+    - Discord
+    - Google
+    - GitHub
+    - OIDC
+  </Accordion>
+</AccordionGroup>
+
+### Data Relationships
+
+The import process preserves relationships:
+
+1. **Users** are imported first
+2. **OAuth providers** and **quotas** are linked to imported users
+3. **Folders** are created, then parent relationships are established
+4. **Files** are linked to users and folders
+5. **Tags** are created and linked to files
+6. **URLs** and **invites** are linked to users
+7. **Metrics** are imported with timestamps preserved
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import fails with 'not super admin' error">
+    Only SUPERADMIN users can perform imports.
+
+    Check your role:
+    ```bash
+    curl https://your-instance.com/api/user/me \
+      -H "Authorization: YOUR_TOKEN"
+    ```
+
+    Ensure `role` is `SUPERADMIN`, not `ADMIN` or `USER`.
+  </Accordion>
+
+  <Accordion title="Files imported but return 404">
+    This means database entries were created but files aren't in storage:
+
+    - Verify files were copied to correct location
+    - Check file names match exactly (case-sensitive)
+    - For S3, ensure bucket and subdirectory configuration matches
+    - Check file permissions (local storage)
+  </Accordion>
+
+  <Accordion title="Import times out or fails on large exports">
+    For very large exports:
+
+    1. Split the export into smaller batches
+    2. Import users first, then files, then URLs
+    3. Increase timeout limits in reverse proxy
+    4. Consider importing directly on the server:
+       ```bash
+       docker exec -it zipline node /path/to/import-script.js
+       ```
+  </Accordion>
+
+  <Accordion title="Users can't log in after import">
+    **v3 import**: Passwords are imported as-is
+
+    **v4 import**: Passwords are imported with original hashes
+
+    If users can't log in:
+    - Verify password was set in v3/source instance
+    - Check if OAuth-only users (no password set)
+    - Have users reset password via "Forgot Password"
+  </Accordion>
+
+  <Accordion title="OAuth providers not working after import">
+    OAuth tokens may be expired or invalid:
+
+    - Users may need to re-authenticate with OAuth providers
+    - Verify OAuth client IDs/secrets match between instances
+    - Check redirect URIs are updated for new domain
+  </Accordion>
+
+  <Accordion title="Many items skipped during import">
+    Items are skipped when conflicts exist. Common causes:
+
+    - Importing into a non-empty instance
+    - Duplicate import attempts
+    - Username/filename conflicts
+
+    Check logs for specific conflicts:
+    ```bash
+    docker compose logs zipline | grep "skipping importing"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Test on staging first">
+    Always test migrations on a staging environment before production:
+
+    1. Deploy fresh v4 instance
+    2. Import test export
+    3. Verify functionality
+    4. Document any issues
+  </Step>
+
+  <Step title="Backup before migration">
+    Create backups before starting:
+
+    ```bash
+    # Database backup
+    docker exec zipline-postgresql pg_dump -U zipline > backup.sql
+
+    # Files backup
+    tar -czf uploads-backup.tar.gz ./uploads
+    ```
+  </Step>
+
+  <Step title="Plan downtime">
+    For production migrations:
+
+    1. Schedule maintenance window
+    2. Put v3 in read-only mode (if possible)
+    3. Perform final export
+    4. Complete migration
+    5. Verify before switching DNS/traffic
+  </Step>
+
+  <Step title="Communicate with users">
+    Inform users about:
+    - Migration schedule
+    - Expected downtime
+    - Any action required (re-authentication, password resets)
+    - New domain/URL if changing
+  </Step>
+
+  <Step title="Verify thoroughly">
+    After migration:
+
+    - Test file uploads
+    - Verify existing files are accessible
+    - Test URL shortening
+    - Check user authentication (password + OAuth)
+    - Verify folder structures
+    - Test ShareX/API integrations
+  </Step>
+</Steps>
+
+## Post-Migration
+
+After successful migration:
+
+1. **Update DNS**: Point domain to new v4 instance
+2. **Update integrations**: Update ShareX configs, API endpoints, etc.
+3. **Monitor logs**: Watch for errors in the first few days
+4. **Keep v3 backup**: Maintain v3 backup for 30 days as safety net
+5. **Update documentation**: Document new endpoints, domains, or procedures
+
+<Tip>
+  Consider running v3 and v4 in parallel for a transition period, allowing users to gradually migrate their integrations.
+</Tip>

@@ -1,0 +1,241 @@
+---
+title: User Management
+description: Manage users, roles, and quotas in your Zipline instance
+---
+
+As an administrator, you can manage users through both the web interface and the CLI tool. This includes creating users, modifying their permissions, setting quotas, and deleting accounts.
+
+## User Roles
+
+Zipline supports three user roles with different permission levels:
+
+- **USER** - Standard user with basic upload and management permissions
+- **ADMIN** - Administrator with elevated permissions to manage other users
+- **SUPERADMIN** - Super administrator with full system access
+
+<Note>
+Administrators can only interact with users of equal or lower roles. For example, an ADMIN cannot modify a SUPERADMIN account.
+</Note>
+
+## Creating Users
+
+You can create new users via the API or web interface:
+
+```bash
+curl -X POST https://your-zipline.com/api/users \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "secure_password",
+    "role": "USER"
+  }'
+```
+
+### Default Avatar
+
+If configured, new users will automatically receive the default avatar specified in your Zipline configuration. You can also provide a custom base64-encoded avatar during user creation.
+
+## Managing Users via API
+
+### List All Users
+
+Retrieve a list of all users in your Zipline instance:
+
+```bash
+curl https://your-zipline.com/api/users \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Query parameters:
+- `noincl` - Exclude the current user from results
+
+### Get User Details
+
+```bash
+curl https://your-zipline.com/api/users/{user_id} \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+### Update User
+
+Modify user properties including username, password, role, and avatar:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/users/{user_id} \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "updated_username",
+    "role": "ADMIN"
+  }'
+```
+
+### Delete User
+
+Delete a user account. You can optionally delete all associated files and URLs:
+
+```bash
+curl -X DELETE https://your-zipline.com/api/users/{user_id} \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": true
+  }'
+```
+
+<Warning>
+Setting `delete: true` will permanently remove all files and URLs owned by the user from both the database and datasource. This action cannot be undone.
+</Warning>
+
+## User Quotas
+
+Zipline supports granular quota management to control resource usage per user.
+
+### Quota Types
+
+- **BY_BYTES** - Limit storage by total bytes
+- **BY_FILES** - Limit by number of files
+- **NONE** - No file quota
+
+### Setting Quotas
+
+Update a user's quota via the API:
+
+```bash
+curl -X PATCH https://your-zipline.com/api/users/{user_id} \
+  -H "Authorization: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "quota": {
+      "filesType": "BY_BYTES",
+      "maxBytes": "10GB",
+      "maxUrls": 100
+    }
+  }'
+```
+
+### Quota Configuration
+
+For **BY_BYTES** quota:
+```json
+{
+  "quota": {
+    "filesType": "BY_BYTES",
+    "maxBytes": "5GB"
+  }
+}
+```
+
+For **BY_FILES** quota:
+```json
+{
+  "quota": {
+    "filesType": "BY_FILES",
+    "maxFiles": 1000
+  }
+}
+```
+
+You can also set a maximum number of URLs per user:
+```json
+{
+  "quota": {
+    "maxUrls": 50
+  }
+}
+```
+
+## Managing Users via CLI
+
+The `ziplinectl` tool provides command-line access to user management.
+
+### List Users
+
+Display all users with basic information:
+
+```bash
+ziplinectl list-users
+```
+
+Options:
+- `-f, --format` - Format the JSON output
+- `-i, --id [user_id]` - List a specific user by ID
+- `-e, --extra [properties...]` - Include additional properties
+
+List available properties:
+```bash
+ziplinectl list-users -e list
+```
+
+Include specific properties:
+```bash
+ziplinectl list-users -f -e token avatar role
+```
+
+### Modify User Properties
+
+Update user properties directly from the command line:
+
+```bash
+ziplinectl set-user -i <user_id> <property> <value>
+```
+
+#### Supported Properties
+
+- `username` - Change username
+- `password` - Reset password (automatically hashed)
+- `role` - Set role (USER, ADMIN, SUPERADMIN)
+- `avatar` - Set avatar URL or base64 data
+- `token` - Change API token
+- `totpSecret` - Modify TOTP secret
+
+#### Examples
+
+Reset a user's password:
+```bash
+ziplinectl set-user -i abc123 password newSecurePassword123
+```
+
+Change user role to admin:
+```bash
+ziplinectl set-user -i abc123 role ADMIN
+```
+
+Update username:
+```bash
+ziplinectl set-user -i abc123 username john_doe
+```
+
+<Note>
+Passwords are automatically hashed before storage. Valid roles are USER, ADMIN, and SUPERADMIN.
+</Note>
+
+## Viewing User Tags
+
+Administrators can view tags created by any user:
+
+```bash
+curl https://your-zipline.com/api/users/{user_id}/tags \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+## Security Considerations
+
+<Steps>
+  <Step title="Role Hierarchy">
+    Always respect the role hierarchy. Higher-level roles cannot be modified by lower-level administrators.
+  </Step>
+  
+  <Step title="Self-Deletion Prevention">
+    Users cannot delete their own accounts via the admin API to prevent accidental lockouts.
+  </Step>
+  
+  <Step title="Password Security">
+    All passwords are hashed using secure algorithms. Passwords are never stored or transmitted in plain text.
+  </Step>
+  
+  <Step title="Rate Limiting">
+    User creation and modification endpoints are rate-limited to prevent abuse.
+  </Step>
+</Steps>

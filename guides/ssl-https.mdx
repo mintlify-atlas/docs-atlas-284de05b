@@ -1,0 +1,431 @@
+---
+title: SSL/HTTPS Setup
+description: Configure SSL/TLS certificates for secure HTTPS access to Zipline
+---
+
+This guide covers different methods to enable HTTPS for your Zipline instance, from automatic solutions to manual certificate management.
+
+## Recommended Approach: Reverse Proxy
+
+The recommended way to add SSL to Zipline is using a reverse proxy like Nginx, Caddy, or Traefik. These handle SSL termination and certificate management.
+
+<Note>
+  Zipline itself doesn't have built-in SSL/TLS support. Use a reverse proxy for HTTPS.
+</Note>
+
+See the [Reverse Proxy Setup](/guides/reverse-proxy) guide for detailed configurations.
+
+## Quick Start: Caddy (Easiest)
+
+Caddy is the simplest option as it automatically obtains and renews SSL certificates.
+
+<Steps>
+  <Step title="Install Caddy">
+    Follow the [official Caddy installation guide](https://caddyserver.com/docs/install) for your OS.
+  </Step>
+
+  <Step title="Create Caddyfile">
+    Create a `Caddyfile` with your domain:
+
+    ```caddy
+    your-domain.com {
+        reverse_proxy localhost:3000
+    }
+    ```
+  </Step>
+
+  <Step title="Configure Zipline">
+    Update your Zipline environment variables:
+
+    ```bash
+    CORE_TRUST_PROXY=true
+    CORE_RETURN_HTTPS_URLS=true
+    CORE_DEFAULT_DOMAIN=your-domain.com
+    ```
+  </Step>
+
+  <Step title="Start Caddy">
+    ```bash
+    sudo caddy start
+    ```
+
+    Caddy will automatically obtain an SSL certificate from Let's Encrypt!
+  </Step>
+</Steps>
+
+<Tip>
+  Ensure ports 80 and 443 are open and your domain's DNS points to your server's IP before starting Caddy.
+</Tip>
+
+## Let's Encrypt with Certbot (Nginx/Apache)
+
+For Nginx or Apache, use Certbot to obtain free SSL certificates from Let's Encrypt.
+
+### Prerequisites
+
+- Domain name pointing to your server
+- Nginx or Apache installed and configured
+- Ports 80 and 443 open
+
+### Nginx + Certbot
+
+<Steps>
+  <Step title="Install Certbot">
+    **Ubuntu/Debian:**
+    ```bash
+    sudo apt update
+    sudo apt install certbot python3-certbot-nginx
+    ```
+
+    **CentOS/RHEL:**
+    ```bash
+    sudo yum install certbot python3-certbot-nginx
+    ```
+  </Step>
+
+  <Step title="Obtain certificate">
+    ```bash
+    sudo certbot --nginx -d your-domain.com -d www.your-domain.com
+    ```
+
+    Follow the prompts to:
+    - Enter your email address
+    - Agree to terms of service
+    - Choose whether to redirect HTTP to HTTPS (recommended: yes)
+  </Step>
+
+  <Step title="Verify auto-renewal">
+    Certbot automatically sets up renewal. Test it with:
+
+    ```bash
+    sudo certbot renew --dry-run
+    ```
+  </Step>
+
+  <Step title="Configure Zipline for HTTPS">
+    ```bash
+    CORE_RETURN_HTTPS_URLS=true
+    CORE_DEFAULT_DOMAIN=your-domain.com
+    ```
+
+    Restart Zipline:
+    ```bash
+    docker compose restart zipline
+    ```
+  </Step>
+</Steps>
+
+### Apache + Certbot
+
+<Steps>
+  <Step title="Install Certbot">
+    ```bash
+    sudo apt update
+    sudo apt install certbot python3-certbot-apache
+    ```
+  </Step>
+
+  <Step title="Obtain certificate">
+    ```bash
+    sudo certbot --apache -d your-domain.com -d www.your-domain.com
+    ```
+  </Step>
+
+  <Step title="Test auto-renewal">
+    ```bash
+    sudo certbot renew --dry-run
+    ```
+  </Step>
+</Steps>
+
+## Docker Compose with Caddy
+
+Run Caddy alongside Zipline in Docker Compose for a complete solution.
+
+```yaml
+services:
+  postgresql:
+    image: postgres:16
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRESQL_USER:-zipline}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD}
+      POSTGRES_DB: ${POSTGRESQL_DB:-zipline}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'zipline']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zipline:
+    image: ghcr.io/diced/zipline
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://${POSTGRESQL_USER:-zipline}:${POSTGRESQL_PASSWORD}@postgresql:5432/${POSTGRESQL_DB:-zipline}
+      - CORE_TRUST_PROXY=true
+      - CORE_RETURN_HTTPS_URLS=true
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    volumes:
+      - './uploads:/zipline/uploads'
+      - './public:/zipline/public'
+      - './themes:/zipline/themes'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - zipline
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+```
+
+**Caddyfile:**
+```caddy
+your-domain.com {
+    reverse_proxy zipline:3000
+}
+```
+
+<Note>
+  When using Docker networking, reference the Zipline service by its service name (`zipline`) instead of `localhost`.
+</Note>
+
+## Cloudflare SSL
+
+Cloudflare provides free SSL certificates and DDoS protection.
+
+<Steps>
+  <Step title="Add domain to Cloudflare">
+    - Sign up at [cloudflare.com](https://cloudflare.com)
+    - Add your domain
+    - Update nameservers at your domain registrar
+  </Step>
+
+  <Step title="Configure SSL mode">
+    In Cloudflare dashboard:
+    - Go to SSL/TLS settings
+    - Set SSL mode to **Full** (or **Full (strict)** if you have a valid cert on your origin)
+  </Step>
+
+  <Step title="Enable additional features (optional)">
+    - **Always Use HTTPS**: Redirect HTTP to HTTPS
+    - **Automatic HTTPS Rewrites**: Fix mixed content
+    - **Minimum TLS Version**: Set to TLS 1.2 or higher
+  </Step>
+
+  <Step title="Configure Zipline">
+    ```bash
+    CORE_TRUST_PROXY=true
+    CORE_RETURN_HTTPS_URLS=true
+    CORE_DEFAULT_DOMAIN=your-domain.com
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  When using Cloudflare, set SSL mode to **Full** or **Full (strict)**. Never use **Flexible** mode as it creates an unencrypted connection between Cloudflare and your server.
+</Warning>
+
+### Cloudflare Origin Certificate (Recommended)
+
+For better security with Cloudflare:
+
+<Steps>
+  <Step title="Generate origin certificate">
+    In Cloudflare dashboard:
+    - Go to SSL/TLS → Origin Server
+    - Click "Create Certificate"
+    - Choose key type and validity (up to 15 years)
+    - Click "Create"
+  </Step>
+
+  <Step title="Save certificate files">
+    Save both:
+    - Origin Certificate (save as `origin-cert.pem`)
+    - Private Key (save as `origin-key.pem`)
+  </Step>
+
+  <Step title="Configure Nginx">
+    ```nginx
+    ssl_certificate /path/to/origin-cert.pem;
+    ssl_certificate_key /path/to/origin-key.pem;
+    ssl_client_certificate /path/to/cloudflare.crt;
+    ssl_verify_client on;
+    ```
+
+    Download Cloudflare's CA cert:
+    ```bash
+    curl -o /path/to/cloudflare.crt https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem
+    ```
+  </Step>
+
+  <Step title="Set SSL mode to Full (strict)">
+    In Cloudflare dashboard, set SSL mode to **Full (strict)**.
+  </Step>
+</Steps>
+
+## Self-Signed Certificates (Development Only)
+
+<Warning>
+  Self-signed certificates should ONLY be used for development/testing. Never use them in production.
+</Warning>
+
+<Steps>
+  <Step title="Generate self-signed certificate">
+    ```bash
+    openssl req -x509 -newkey rsa:4096 -nodes \
+      -keyout key.pem -out cert.pem -days 365 \
+      -subj "/CN=localhost"
+    ```
+  </Step>
+
+  <Step title="Configure Nginx">
+    ```nginx
+    server {
+        listen 443 ssl;
+        server_name localhost;
+
+        ssl_certificate /path/to/cert.pem;
+        ssl_certificate_key /path/to/key.pem;
+
+        location / {
+            proxy_pass http://localhost:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Access with certificate warning">
+    Access `https://localhost` and accept the security warning in your browser.
+  </Step>
+</Steps>
+
+## Configuration After SSL Setup
+
+Once SSL is configured, update Zipline settings:
+
+```bash
+# Tell Zipline to return HTTPS URLs
+CORE_RETURN_HTTPS_URLS=true
+
+# Set your domain
+CORE_DEFAULT_DOMAIN=your-domain.com
+
+# Trust proxy headers (if using reverse proxy)
+CORE_TRUST_PROXY=true
+```
+
+Restart Zipline:
+```bash
+docker compose restart zipline
+```
+
+## Verifying SSL Setup
+
+<Steps>
+  <Step title="Check certificate validity">
+    ```bash
+    openssl s_client -connect your-domain.com:443 -servername your-domain.com
+    ```
+
+    Look for:
+    - `Verify return code: 0 (ok)`
+    - Correct certificate details
+  </Step>
+
+  <Step title="Test with SSL Labs">
+    Visit [SSL Labs SSL Test](https://www.ssllabs.com/ssltest/) and enter your domain.
+
+    Aim for an **A** or **A+** rating.
+  </Step>
+
+  <Step title="Verify Zipline URLs">
+    Upload a file and check the returned URL uses `https://`.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Certificate validation failed">
+    - Ensure your domain DNS points to your server
+    - Check that ports 80 and 443 are open
+    - Verify firewall rules allow ACME challenge requests
+    - Check Certbot logs: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
+  </Accordion>
+
+  <Accordion title="Mixed content warnings">
+    This happens when HTTPS pages load HTTP resources:
+
+    - Ensure `CORE_RETURN_HTTPS_URLS=true` is set
+    - Check that custom themes don't reference HTTP resources
+    - If using Cloudflare, enable "Automatic HTTPS Rewrites"
+  </Accordion>
+
+  <Accordion title="Certificate renewal fails">
+    - Check that your web server serves `.well-known/acme-challenge/`
+    - Ensure ports 80 and 443 remain accessible
+    - Verify Certbot timer is active: `systemctl status certbot.timer`
+    - Check renewal logs: `sudo journalctl -u certbot.service`
+  </Accordion>
+
+  <Accordion title="Uploaded files show HTTP URLs instead of HTTPS">
+    - Verify `CORE_RETURN_HTTPS_URLS=true` is set
+    - Restart Zipline after changing configuration
+    - Check that `CORE_TRUST_PROXY=true` is set if using a reverse proxy
+    - Ensure reverse proxy sends `X-Forwarded-Proto: https` header
+  </Accordion>
+
+  <Accordion title="ERR_SSL_PROTOCOL_ERROR">
+    - Verify SSL certificate paths in reverse proxy config
+    - Check that certificate files are readable
+    - Ensure private key matches certificate
+    - Test SSL config: `sudo nginx -t` or `sudo apache2ctl configtest`
+  </Accordion>
+</AccordionGroup>
+
+## Security Recommendations
+
+- **Use TLS 1.2 or higher**: Disable older protocols (TLS 1.0, 1.1)
+- **Strong cipher suites**: Use modern, secure ciphers
+- **Enable HSTS**: Force browsers to use HTTPS
+- **Regular updates**: Keep your reverse proxy and OS updated
+- **Monitor expiration**: Set up alerts for certificate expiration
+- **Use CAA records**: Restrict which CAs can issue certificates for your domain
+
+### Example Nginx Security Headers
+
+```nginx
+# HSTS (6 months)
+add_header Strict-Transport-Security "max-age=15768000; includeSubDomains" always;
+
+# Prevent clickjacking
+add_header X-Frame-Options "SAMEORIGIN" always;
+
+# XSS protection
+add_header X-Content-Type-Options "nosniff" always;
+```
+
+<Tip>
+  For the best balance of ease and security, use Caddy for automatic SSL management or Cloudflare for free SSL with additional performance benefits.
+</Tip>

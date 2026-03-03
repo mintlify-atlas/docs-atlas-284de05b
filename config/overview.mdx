@@ -1,0 +1,142 @@
+---
+title: Configuration Overview
+description: Learn how to configure Zipline using environment variables, database settings, and configuration files
+---
+
+Zipline is highly configurable through environment variables and database-persisted settings. This guide provides an overview of how configuration works in Zipline.
+
+## Configuration Methods
+
+Zipline supports two primary configuration methods:
+
+1. **Environment Variables** - Used for core system settings, datasource configuration, and initial setup
+2. **Database Settings** - Used for runtime configuration that can be modified through the web interface
+
+### Environment Variables
+
+Environment variables are loaded when Zipline starts and control fundamental aspects of the system. These include:
+
+- Server settings (port, hostname)
+- Database connection
+- Datasource configuration (local or S3)
+- Security settings (secret key, trust proxy)
+
+### Database Settings
+
+Many configuration options are stored in the database in the `Zipline` model. These settings can be modified through:
+
+- The web interface (Admin panel)
+- Direct database updates
+- Environment variables (which override database values)
+
+Database settings include file upload options, website customization, OAuth providers, webhooks, and more.
+
+## Configuration Priority
+
+When a setting can be configured both via environment variable and database:
+
+1. Environment variables take highest priority
+2. Database values are used if no environment variable is set
+3. Default values are used if neither is configured
+
+## Required Configuration
+
+At minimum, Zipline requires:
+
+<ParamField path="CORE_SECRET" type="string" required>
+  A secure secret key for session encryption and security. Must be at least 32 characters long.
+  
+  ```bash
+  openssl rand -base64 42 | tr -dc A-Za-z0-9 | cut -c -32
+  ```
+</ParamField>
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string for the database.
+  
+  ```bash
+  DATABASE_URL=postgresql://user:password@localhost:5432/zipline
+  ```
+</ParamField>
+
+<Note>
+Without `CORE_SECRET`, Zipline will refuse to start. This is a critical security requirement.
+</Note>
+
+## Configuration Files
+
+Zipline looks for environment variables in the following locations:
+
+- `.env` file in the working directory
+- System environment variables
+- Docker/container environment
+
+### Docker Compose Example
+
+```yaml
+services:
+  zipline:
+    image: ghcr.io/diced/zipline
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://zipline:password@postgresql:5432/zipline
+```
+
+## Using Secret Files
+
+Zipline supports reading sensitive values from files by appending `_FILE` to any environment variable name. This is useful for Docker secrets:
+
+```bash
+CORE_SECRET_FILE=/run/secrets/zipline_secret
+DATABASE_PASSWORD_FILE=/run/secrets/db_password
+```
+
+When the `_FILE` variant is set, Zipline will read the file contents and use that as the value.
+
+## Configuration Validation
+
+Zipline validates all configuration on startup using Zod schemas. If configuration is invalid:
+
+- Clear error messages indicate what's wrong
+- The server will refuse to start
+- Check logs for detailed validation errors
+
+Common validation errors:
+
+- `CORE_SECRET` too short (must be ≥32 characters)
+- Invalid URL formats
+- Missing required S3 credentials when `DATASOURCE_TYPE=s3`
+- Invalid interval values (must be ≤2147483647ms)
+
+## Configuration Categories
+
+Zipline configuration is organized into logical groups:
+
+<CardGroup cols={2}>
+  <Card title="Core Settings" icon="server" href="/config/environment-variables#core-settings">
+    Server, database, and fundamental system configuration
+  </Card>
+  
+  <Card title="Datasource" icon="database" href="/config/datasource">
+    File storage backend configuration (local or S3)
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/config/authentication">
+    OAuth providers, MFA, and authentication options
+  </Card>
+  
+  <Card title="Security" icon="shield" href="/config/security">
+    Rate limiting, proxy settings, and security features
+  </Card>
+  
+  <Card title="Customization" icon="palette" href="/config/customization">
+    Website branding, themes, and user-facing options
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Environment Variables Reference" icon="list" href="/config/environment-variables">
+  Complete reference of all environment variables
+</Card>

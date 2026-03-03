@@ -1,0 +1,376 @@
+---
+title: Backups & Data Export
+description: Export, backup, and restore your Zipline instance data
+---
+
+Zipline provides comprehensive backup functionality to export all your instance data, including users, files, URLs, settings, and metrics. This enables disaster recovery, migration, and data archival.
+
+## Export Format
+
+Zipline uses a versioned export format (currently version 4) that includes:
+
+- All users and authentication data
+- Files and URLs metadata
+- Folders and tags
+- Invites and usage statistics
+- Server settings and configuration
+- Metrics and analytics (optional)
+- System information and environment
+
+## Creating a Backup
+
+Export your entire Zipline instance:
+
+```bash
+curl "https://your-zipline.com/api/server/export" \
+  -H "Authorization: YOUR_TOKEN" \
+  -o zipline_backup_$(date +%Y%m%d).json
+```
+
+This creates a timestamped JSON file containing all your data.
+
+### Export Options
+
+**Exclude metrics from export:**
+```bash
+curl "https://your-zipline.com/api/server/export?nometrics=true" \
+  -H "Authorization: YOUR_TOKEN" \
+  -o zipline_backup.json
+```
+
+**Get data counts only:**
+```bash
+curl "https://your-zipline.com/api/server/export?counts=true" \
+  -H "Authorization: YOUR_TOKEN"
+```
+
+Response:
+```json
+{
+  "users": 25,
+  "files": 1543,
+  "urls": 432,
+  "folders": 78,
+  "invites": 12,
+  "thumbnails": 891,
+  "metrics": 156
+}
+```
+
+## Export File Structure
+
+The export file contains:
+
+```json
+{
+  "versions": {
+    "export": "4",
+    "node": "v20.10.0",
+    "zipline": "3.8.0"
+  },
+  "request": {
+    "date": "2024-03-03T12:00:00.000Z",
+    "user": "user_id:username",
+    "os": {
+      "arch": "x64",
+      "cpus": 8,
+      "hostname": "zipline-server",
+      "platform": "linux",
+      "release": "6.1.0"
+    },
+    "env": { /* environment variables */ }
+  },
+  "data": {
+    "settings": { /* Zipline configuration */ },
+    "users": [ /* user accounts */ ],
+    "userPasskeys": [ /* WebAuthn passkeys */ ],
+    "userQuotas": [ /* user quotas */ ],
+    "userOauthProviders": [ /* OAuth connections */ ],
+    "userTags": [ /* user tags */ ],
+    "invites": [ /* invite codes */ ],
+    "folders": [ /* folder structure */ ],
+    "urls": [ /* shortened URLs */ ],
+    "files": [ /* file metadata */ ],
+    "thumbnails": [ /* thumbnail metadata */ ],
+    "metrics": [ /* analytics snapshots */ ]
+  }
+}
+```
+
+## Exported Data Types
+
+### Users
+
+Includes:
+- User ID, username, and hashed password
+- Avatar data
+- Role (USER, ADMIN, SUPERADMIN)
+- View preferences
+- TOTP secrets for 2FA
+- Creation timestamp
+
+### Files
+
+For each file:
+- File ID, name, and original name
+- Size and MIME type
+- View count and max views
+- Password protection
+- Associated folder and user
+- Deletion timestamp (if scheduled)
+- Favorite status
+
+<Note>
+File exports contain metadata only. The actual file data must be backed up separately from your datasource (local storage, S3, etc.).
+</Note>
+
+### URLs
+
+For shortened URLs:
+- URL ID and code
+- Destination URL
+- Vanity path
+- View statistics
+- Password protection
+- Enabled/disabled status
+
+### Invites
+
+Invite data includes:
+- Invite code
+- Usage count and maximum uses
+- Expiration date
+- Creator (inviter) ID
+
+### Folders
+
+Folder structure:
+- Folder ID and name
+- Public/private status
+- Upload permissions
+- Parent folder ID (for nested folders)
+- Associated files
+
+### Tags
+
+User tags include:
+- Tag name and color
+- Associated file IDs
+- Creator user ID
+
+### Passkeys
+
+WebAuthn passkey data:
+- Passkey ID and name
+- Registration data
+- Last used timestamp
+
+### OAuth Providers
+
+OAuth connection data:
+- Provider name
+- OAuth ID and username
+- Access and refresh tokens
+
+### Quotas
+
+User quota settings:
+- Quota type (BY_BYTES, BY_FILES)
+- Maximum files and bytes
+- Maximum URLs
+
+### Metrics
+
+Analytics snapshots containing:
+- System-wide statistics
+- Per-user usage data
+- File type distribution
+- Timestamps
+
+## Importing/Restoring Data
+
+Zipline supports importing data from export files to restore or migrate instances.
+
+### Version 4 Import
+
+The import process validates the export format and handles:
+
+- Schema validation
+- Duplicate detection
+- Relationship preservation
+- Incremental imports
+
+<Warning>
+**Import Considerations:**
+
+- Existing data with matching IDs will be skipped
+- User relationships (invites, files, folders) are preserved
+- Failed imports are logged with details
+- Database constraints are enforced
+</Warning>
+
+### Import Process
+
+When importing data:
+
+<Steps>
+  <Step title="Validation">
+    Export file format and version are validated
+  </Step>
+  
+  <Step title="Settings Import">
+    Server settings are imported first
+  </Step>
+  
+  <Step title="Users Import">
+    User accounts, passkeys, quotas, and OAuth providers are created
+  </Step>
+  
+  <Step title="Content Import">
+    Tags, folders, files, URLs, and invites are imported
+  </Step>
+  
+  <Step title="Metrics Import">
+    Historical metrics are restored (if included)
+  </Step>
+  
+  <Step title="Verification">
+    Import statistics are reported
+  </Step>
+</Steps>
+
+## Backup Best Practices
+
+### Regular Backups
+
+Create automated backups on a schedule:
+
+```bash
+#!/bin/bash
+# Daily backup script
+
+BACKUP_DIR="/path/to/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+curl "https://your-zipline.com/api/server/export" \
+  -H "Authorization: YOUR_TOKEN" \
+  -o "$BACKUP_DIR/zipline_$DATE.json"
+
+# Keep only last 30 days of backups
+find "$BACKUP_DIR" -name "zipline_*.json" -mtime +30 -delete
+```
+
+### Backup Storage
+
+<Steps>
+  <Step title="Multiple Locations">
+    Store backups in multiple locations (local, cloud, offsite)
+  </Step>
+  
+  <Step title="Encryption">
+    Encrypt backup files as they contain sensitive data
+  </Step>
+  
+  <Step title="Retention Policy">
+    Implement a retention policy (daily, weekly, monthly archives)
+  </Step>
+  
+  <Step title="Test Restores">
+    Regularly test restore procedures to verify backup integrity
+  </Step>
+</Steps>
+
+### Complete Backup Strategy
+
+A complete Zipline backup requires:
+
+1. **Database export** (via API endpoint)
+2. **File datasource** backup (S3 bucket, local directory)
+3. **Configuration files** (docker-compose.yml, .env)
+4. **Thumbnails** (if stored separately)
+
+## Datasource Backup
+
+The export API provides metadata only. Backup your actual files separately:
+
+### Local Storage
+
+```bash
+# Backup local files
+tar -czf files_backup_$(date +%Y%m%d).tar.gz /path/to/zipline/uploads/
+```
+
+### S3 Storage
+
+```bash
+# Sync S3 bucket to backup location
+aws s3 sync s3://your-zipline-bucket s3://your-backup-bucket/zipline/
+```
+
+### Other Datasources
+
+Consult your datasource provider's documentation for backup procedures.
+
+## Migration Between Instances
+
+To migrate Zipline to a new server:
+
+<Steps>
+  <Step title="Export Data">
+    Create a full export from the source instance
+  </Step>
+  
+  <Step title="Backup Files">
+    Copy all files from the datasource
+  </Step>
+  
+  <Step title="Setup New Instance">
+    Install and configure Zipline on the new server
+  </Step>
+  
+  <Step title="Import Data">
+    Import the export file to the new instance
+  </Step>
+  
+  <Step title="Restore Files">
+    Copy files to the new datasource
+  </Step>
+  
+  <Step title="Verify">
+    Test uploads, downloads, and user access
+  </Step>
+</Steps>
+
+## Export Security
+
+<Warning>
+**Security Considerations:**
+
+- Export files contain sensitive data including hashed passwords
+- OAuth tokens and API keys are included in exports
+- TOTP secrets for 2FA are exported
+- Environment variables may contain credentials
+- Always encrypt and secure backup files
+- Limit access to backup files to trusted administrators
+</Warning>
+
+## Troubleshooting
+
+### Export Fails with "Invalid setup"
+
+Ensure your Zipline instance has completed the initial setup process.
+
+### Large Export Files
+
+For instances with many files or metrics:
+- Use `nometrics=true` to reduce file size
+- Compress exports: `gzip zipline_backup.json`
+- Consider splitting backups by date range
+
+### Import Failures
+
+Check:
+- Export format version compatibility
+- Database schema matches export version
+- Sufficient disk space and database resources
+- Import logs for specific error messages
