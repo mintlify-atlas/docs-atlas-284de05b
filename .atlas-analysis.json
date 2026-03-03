@@ -1,0 +1,207 @@
+{
+  "projectType": "saas",
+  "projectName": "Zipline",
+  "projectDescription": "A ShareX/file upload server that is easy to use, packed with features, and with an easy setup",
+  "theme": "aspen",
+  "primaryColor": "#3b82f6",
+  "lightColor": "#60a5fa",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "get-started/docker",
+              "get-started/source",
+              "get-started/first-steps"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/uploads",
+              "concepts/folders",
+              "concepts/url-shortening",
+              "concepts/embeds",
+              "concepts/storage"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "config/overview",
+              "config/environment-variables",
+              "config/datasource",
+              "config/authentication",
+              "config/security",
+              "config/customization"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/oauth",
+              "features/2fa-passkeys",
+              "features/webhooks",
+              "features/image-compression",
+              "features/video-thumbnails",
+              "features/custom-themes",
+              "features/invites-quotas"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/sharex",
+              "integrations/flameshot",
+              "integrations/api-clients"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/user-management",
+              "admin/invites",
+              "admin/metrics",
+              "admin/backups",
+              "admin/cli-tool"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/s3-setup",
+              "guides/reverse-proxy",
+              "guides/ssl-https",
+              "guides/custom-domains",
+              "guides/migrations",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/introduction",
+              "api/authentication",
+              "api/rate-limits",
+              "api/errors"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/register",
+              "api/auth/logout",
+              "api/auth/oauth"
+            ]
+          },
+          {
+            "group": "Uploads",
+            "pages": [
+              "api/upload/file",
+              "api/upload/partial",
+              "api/upload/text"
+            ]
+          },
+          {
+            "group": "Files",
+            "pages": [
+              "api/files/list",
+              "api/files/get",
+              "api/files/update",
+              "api/files/delete",
+              "api/files/password"
+            ]
+          },
+          {
+            "group": "Folders",
+            "pages": [
+              "api/folders/list",
+              "api/folders/create",
+              "api/folders/update",
+              "api/folders/delete",
+              "api/folders/export"
+            ]
+          },
+          {
+            "group": "URLs",
+            "pages": [
+              "api/urls/list",
+              "api/urls/create",
+              "api/urls/update",
+              "api/urls/delete"
+            ]
+          },
+          {
+            "group": "User",
+            "pages": [
+              "api/user/profile",
+              "api/user/avatar",
+              "api/user/token",
+              "api/user/sessions",
+              "api/user/stats",
+              "api/user/mfa"
+            ]
+          },
+          {
+            "group": "Admin",
+            "pages": [
+              "api/admin/users",
+              "api/admin/invites",
+              "api/admin/settings",
+              "api/admin/stats",
+              "api/admin/import-export"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "File uploads with support for any file type",
+    "Folder organization and tags",
+    "URL shortening service",
+    "Multiple authentication methods (OAuth2, 2FA, Passkeys)",
+    "Image compression and video thumbnails",
+    "Discord and HTTP webhooks",
+    "Custom embeds for shared files",
+    "S3 and local storage support",
+    "User quotas and invites",
+    "Custom themes and branding",
+    "ShareX integration",
+    "Progressive Web App (PWA)",
+    "Partial/chunked uploads",
+    "Admin dashboard with metrics"
+  ],
+  "publicApiSurface": [
+    "POST /api/upload - Upload files",
+    "POST /api/upload/partial - Chunked uploads",
+    "GET /api/user/files - List user files",
+    "POST /api/user/folders - Create folder",
+    "POST /api/user/urls - Create short URL",
+    "POST /api/auth/login - User login",
+    "POST /api/auth/register - User registration",
+    "GET /api/stats - Server statistics",
+    "GET /api/user - Get user profile",
+    "DELETE /api/user/files/:id - Delete file",
+    "PATCH /api/user/files/:id - Update file",
+    "POST /api/user/mfa/totp - Enable 2FA",
+    "POST /api/user/mfa/passkey - Register passkey",
+    "GET /api/users - Admin: list users",
+    "GET /api/server/settings - Get server settings",
+    "ziplinectl read-config - CLI config export",
+    "ziplinectl list-users - CLI user management",
+    "ziplinectl set-user - CLI user modification",
+    "ziplinectl import-dir - CLI bulk import"
+  ]
+}
