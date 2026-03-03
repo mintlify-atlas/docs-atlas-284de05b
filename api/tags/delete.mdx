@@ -1,0 +1,65 @@
+---
+title: Delete tag
+description: Permanently delete a tag
+---
+
+## Endpoint
+
+```
+DELETE /api/user/tags/:id
+```
+
+Permanently deletes a tag. You can only delete tags that belong to your account.
+
+<Warning>
+  This action is irreversible. The tag will be removed from all files that use it.
+</Warning>
+
+## Authentication
+
+Requires authentication via API token or session cookie.
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  The tag ID to delete
+</ParamField>
+
+## Response
+
+Returns a success confirmation.
+
+<ResponseField name="success" type="boolean">
+  Always `true` when deletion is successful
+</ResponseField>
+
+## Example
+
+```bash
+curl -X DELETE https://your-zipline.com/api/user/tags/cld1234567890 \
+  -H "Authorization: YOUR_API_TOKEN"
+```
+
+### Response
+
+```json
+{
+  "success": true
+}
+```
+
+## Errors
+
+<ResponseField name="404" type="error">
+  **Not found** - Tag does not exist or doesn't belong to your account
+</ResponseField>
+
+<ResponseField name="401" type="error">
+  **Unauthorized** - Invalid or missing authentication token
+</ResponseField>
+
+## Notes
+
+- Deleting a tag removes it from all files that were tagged with it
+- This operation cannot be undone
+- Consider exporting your data before deleting important tags

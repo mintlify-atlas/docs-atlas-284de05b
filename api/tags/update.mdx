@@ -1,0 +1,114 @@
+---
+title: Update tag
+description: Update a tag's name or color
+---
+
+## Endpoint
+
+```
+PATCH /api/user/tags/:id
+```
+
+Updates a tag's name and/or color. You can only update tags that belong to your account.
+
+## Authentication
+
+Requires authentication via API token or session cookie.
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  The tag ID
+</ParamField>
+
+## Request body
+
+All fields are optional. Provide only the fields you want to update.
+
+<ParamField path="name" type="string">
+  New tag name (trimmed of whitespace)
+</ParamField>
+
+<ParamField path="color" type="string">
+  New hex color code (3 or 6 digits). Must match pattern `#[0-9A-Fa-f]{3,6}`
+</ParamField>
+
+## Response
+
+Returns the updated tag object.
+
+<ResponseField name="id" type="string">
+  Unique identifier for the tag
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Updated tag name
+</ResponseField>
+
+<ResponseField name="color" type="string">
+  Updated hex color code
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  ID of the user who owns this tag
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of when the tag was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of when the tag was last updated
+</ResponseField>
+
+## Examples
+
+### Update tag color
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/tags/cld1234567890 \
+  -H "Authorization: YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "color": "#10b981"
+  }'
+```
+
+### Update tag name and color
+
+```bash
+curl -X PATCH https://your-zipline.com/api/user/tags/cld1234567890 \
+  -H "Authorization: YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Work Screenshots",
+    "color": "#f59e0b"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "cld1234567890",
+  "name": "Work Screenshots",
+  "color": "#f59e0b",
+  "userId": "user123",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T14:25:00.000Z"
+}
+```
+
+## Errors
+
+<ResponseField name="400" type="error">
+  **tag name already exists** - Another tag with this name already exists
+</ResponseField>
+
+<ResponseField name="404" type="error">
+  **Not found** - Tag does not exist or doesn't belong to your account
+</ResponseField>
+
+<ResponseField name="401" type="error">
+  **Unauthorized** - Invalid or missing authentication token
+</ResponseField>

@@ -1,0 +1,80 @@
+---
+title: List tags
+description: Retrieve all tags for the authenticated user
+---
+
+## Endpoint
+
+```
+GET /api/user/tags
+```
+
+Returns all tags created by the authenticated user. Tags are used to organize and categorize files.
+
+## Authentication
+
+Requires authentication via API token or session cookie.
+
+## Response
+
+Returns an array of tag objects.
+
+<ResponseField name="id" type="string">
+  Unique identifier for the tag
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Tag name
+</ResponseField>
+
+<ResponseField name="color" type="string">
+  Hex color code for the tag (e.g., `#3b82f6`)
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  ID of the user who owns this tag
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of when the tag was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of when the tag was last updated
+</ResponseField>
+
+## Example
+
+```bash
+curl -H "Authorization: YOUR_API_TOKEN" \
+  https://your-zipline.com/api/user/tags
+```
+
+### Response
+
+```json
+[
+  {
+    "id": "cld1234567890",
+    "name": "Screenshots",
+    "color": "#3b82f6",
+    "userId": "user123",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  },
+  {
+    "id": "cld0987654321",
+    "name": "Work",
+    "color": "#10b981",
+    "userId": "user123",
+    "createdAt": "2024-01-10T14:20:00.000Z",
+    "updatedAt": "2024-01-10T14:20:00.000Z"
+  }
+]
+```
+
+## Use cases
+
+- Display all available tags in a file management UI
+- Build tag selection dropdowns
+- Sync tags across multiple clients

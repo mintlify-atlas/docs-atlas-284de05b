@@ -1,0 +1,99 @@
+---
+title: Create tag
+description: Create a new tag for organizing files
+---
+
+## Endpoint
+
+```
+POST /api/user/tags
+```
+
+Creates a new tag that can be used to organize and categorize files.
+
+## Authentication
+
+Requires authentication via API token or session cookie.
+
+## Rate limiting
+
+1 request per second
+
+## Request body
+
+<ParamField path="name" type="string" required>
+  Tag name (trimmed of whitespace)
+</ParamField>
+
+<ParamField path="color" type="string" required>
+  Hex color code (3 or 6 digits). Must match pattern `#[0-9A-Fa-f]{3,6}`
+  
+  Examples: `#f00`, `#ff0000`, `#3b82f6`
+</ParamField>
+
+## Response
+
+Returns the created tag object.
+
+<ResponseField name="id" type="string">
+  Unique identifier for the tag
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Tag name
+</ResponseField>
+
+<ResponseField name="color" type="string">
+  Hex color code for the tag
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  ID of the user who owns this tag
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of when the tag was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of when the tag was last updated
+</ResponseField>
+
+## Example
+
+```bash
+curl -X POST https://your-zipline.com/api/user/tags \
+  -H "Authorization: YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Screenshots",
+    "color": "#3b82f6"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "cld1234567890",
+  "name": "Screenshots",
+  "color": "#3b82f6",
+  "userId": "user123",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+## Errors
+
+<ResponseField name="400" type="error">
+  **Cannot create tag with the same name** - A tag with this name already exists for your account
+</ResponseField>
+
+<ResponseField name="401" type="error">
+  **Unauthorized** - Invalid or missing authentication token
+</ResponseField>
+
+<ResponseField name="429" type="error">
+  **Rate limit exceeded** - Too many requests (max 1/second)
+</ResponseField>

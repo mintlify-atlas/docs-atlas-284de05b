@@ -1,0 +1,164 @@
+---
+title: Get recent files
+description: Retrieve recently uploaded files
+---
+
+## Endpoint
+
+```
+GET /api/user/recent
+```
+
+Retrieves the most recently uploaded files for the authenticated user. Useful for displaying recent activity in dashboards or client applications.
+
+## Authentication
+
+Requires authentication via API token or session cookie.
+
+## Query parameters
+
+<ParamField query="take" type="number" default="3">
+  Number of recent files to return (min: 1, max: 100)
+</ParamField>
+
+## Response
+
+Returns an array of file objects, ordered by creation date (most recent first).
+
+<ResponseField name="id" type="string">
+  Unique identifier for the file
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Generated filename (without extension)
+</ResponseField>
+
+<ResponseField name="originalName" type="string">
+  Original filename when uploaded
+</ResponseField>
+
+<ResponseField name="mimetype" type="string">
+  MIME type of the file
+</ResponseField>
+
+<ResponseField name="size" type="string">
+  File size in bytes (as string)
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of when the file was uploaded
+</ResponseField>
+
+<ResponseField name="expiresAt" type="string | null">
+  ISO 8601 timestamp of when the file will be automatically deleted, or null if no expiration
+</ResponseField>
+
+<ResponseField name="maxViews" type="number | null">
+  Maximum number of views before auto-deletion, or null if unlimited
+</ResponseField>
+
+<ResponseField name="views" type="number">
+  Current view count
+</ResponseField>
+
+<ResponseField name="favorite" type="boolean">
+  Whether the file is marked as a favorite
+</ResponseField>
+
+<ResponseField name="embed" type="boolean">
+  Whether custom embed is enabled
+</ResponseField>
+
+<ResponseField name="password" type="boolean">
+  Whether the file is password-protected (actual password is never returned)
+</ResponseField>
+
+<Expandable title="Additional fields">
+  <ResponseField name="folderId" type="string | null">
+    ID of the folder containing this file, or null if not in a folder
+  </ResponseField>
+
+  <ResponseField name="thumbnail" type="string | null">
+    URL to the thumbnail image, or null if no thumbnail exists
+  </ResponseField>
+
+  <ResponseField name="tags" type="array">
+    Array of tag objects associated with this file
+  </ResponseField>
+</Expandable>
+
+## Examples
+
+### Get 3 most recent files (default)
+
+```bash
+curl -H "Authorization: YOUR_API_TOKEN" \
+  https://your-zipline.com/api/user/recent
+```
+
+### Get 10 most recent files
+
+```bash
+curl -H "Authorization: YOUR_API_TOKEN" \
+  "https://your-zipline.com/api/user/recent?take=10"
+```
+
+### Response
+
+```json
+[
+  {
+    "id": "abc123",
+    "name": "x7k9m2",
+    "originalName": "screenshot.png",
+    "mimetype": "image/png",
+    "size": "245678",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "expiresAt": null,
+    "maxViews": null,
+    "views": 5,
+    "favorite": false,
+    "embed": false,
+    "password": false,
+    "folderId": null,
+    "thumbnail": "/r/thumb/abc123.jpg",
+    "tags": [
+      {
+        "id": "tag1",
+        "name": "Screenshots",
+        "color": "#3b82f6"
+      }
+    ]
+  },
+  {
+    "id": "def456",
+    "name": "p4n8q1",
+    "originalName": "document.pdf",
+    "mimetype": "application/pdf",
+    "size": "1048576",
+    "createdAt": "2024-01-14T16:45:00.000Z",
+    "expiresAt": "2024-01-21T16:45:00.000Z",
+    "maxViews": null,
+    "views": 2,
+    "favorite": true,
+    "embed": false,
+    "password": true,
+    "folderId": "folder123",
+    "thumbnail": null,
+    "tags": []
+  }
+]
+```
+
+## Use cases
+
+- Display recent uploads in a dashboard
+- Show upload history in client applications
+- Build activity feeds
+- Quick access to recently uploaded files
+
+## Notes
+
+- Files are ordered by `createdAt` timestamp in descending order
+- The `password` field only indicates whether a password is set (never returns the actual password)
+- Maximum of 100 files can be requested at once
